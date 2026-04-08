@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:DTSID="{F2A3B4C5-D6E7-5F6A-9B0C-1D2E3F4A5B6C}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:ObjectName="Load_FactSales"
+  DTS:PackageType="5">
+  <DTS:Property DTS:Name="Description">Bulk loads sales facts from staging to data warehouse with indexing strategy</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[DW_Connection]" DTS:CreationName="OLEDB" DTS:ObjectName="DW_Connection">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <!-- SQL Task: Drop indexes for faster load -->
+    <DTS:Executable DTS:refId="Package\Drop Indexes" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="EXEC dw.DropFactSalesIndexes" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- SQL Task: Switch partition or truncate -->
+    <DTS:Executable DTS:refId="Package\Prepare Target" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="
+            -- For incremental: no action
+            -- For full reload: TRUNCATE TABLE dw.FactSales
+          " />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- Call stored procedure to merge data -->
+    <DTS:Executable DTS:refId="Package\Merge Sales Data" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="EXEC dw.MergeFactSales" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- SQL Task: Rebuild indexes -->
+    <DTS:Executable DTS:refId="Package\Rebuild Indexes" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="EXEC dw.RebuildFactSalesIndexes" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- SQL Task: Update statistics -->
+    <DTS:Executable DTS:refId="Package\Update Statistics" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="UPDATE STATISTICS dw.FactSales" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:From="Package\Drop Indexes" DTS:To="Package\Prepare Target" />
+    <DTS:PrecedenceConstraint DTS:From="Package\Prepare Target" DTS:To="Package\Merge Sales Data" />
+    <DTS:PrecedenceConstraint DTS:From="Package\Merge Sales Data" DTS:To="Package\Rebuild Indexes" />
+    <DTS:PrecedenceConstraint DTS:From="Package\Rebuild Indexes" DTS:To="Package\Update Statistics" />
+  </DTS:PrecedenceConstraints>
+</DTS:Executable>

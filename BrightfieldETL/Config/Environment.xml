@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<EnvironmentConfiguration>
+  <Folder Name="BrightfieldETL">
+    <Environment Name="Production">
+      <Variables>
+        <Variable Name="DW_ServerName" DataType="String" Description="Data Warehouse SQL Server">DW-PROD-SQL</Variable>
+        <Variable Name="DW_DatabaseName" DataType="String" Description="Data Warehouse Database">BrightfieldDW</Variable>
+        <Variable Name="POS_ServerName" DataType="String" Description="POS SQL Server">POS-PROD-SQL</Variable>
+        <Variable Name="CRM_ServerName" DataType="String" Description="CRM SQL Server">CRM-PROD-SQL</Variable>
+        <Variable Name="Oracle_ConnectionString" DataType="String" Description="Oracle Inventory Connection">Data Source=INVDB-PROD;User ID=etl_reader;Password=***;</Variable>
+        <Variable Name="FTP_SharePath" DataType="String" Description="Supplier FTP Path">\\PROD-FTP\suppliers\</Variable>
+        <Variable Name="ApiEndpoint" DataType="String" Description="E-commerce API">https://api.brightfield-ecommerce.com/v1/orders</Variable>
+        <Variable Name="ApiKey" DataType="String" Description="API Authentication Key" Sensitive="true">****</Variable>
+        <Variable Name="ErrorLogPath" DataType="String" Description="Error file path">\\PROD-LOGS\ETLErrors\</Variable>
+      </Variables>
+    </Environment>
+    <Environment Name="Development">
+      <Variables>
+        <Variable Name="DW_ServerName" DataType="String" Description="Data Warehouse SQL Server">DW-DEV-SQL</Variable>
+        <Variable Name="DW_DatabaseName" DataType="String" Description="Data Warehouse Database">BrightfieldDW_Dev</Variable>
+        <Variable Name="POS_ServerName" DataType="String" Description="POS SQL Server">POS-DEV-SQL</Variable>
+        <Variable Name="CRM_ServerName" DataType="String" Description="CRM SQL Server">CRM-DEV-SQL</Variable>
+        <Variable Name="Oracle_ConnectionString" DataType="String" Description="Oracle Inventory Connection">Data Source=INVDB-DEV;User ID=etl_reader;Password=***;</Variable>
+        <Variable Name="FTP_SharePath" DataType="String" Description="Supplier FTP Path">\\DEV-FTP\suppliers\</Variable>
+        <Variable Name="ApiEndpoint" DataType="String" Description="E-commerce API">https://api-dev.brightfield-ecommerce.com/v1/orders</Variable>
+        <Variable Name="ApiKey" DataType="String" Description="API Authentication Key" Sensitive="true">DEV_KEY</Variable>
+        <Variable Name="ErrorLogPath" DataType="String" Description="Error file path">C:\ETLErrors\</Variable>
+      </Variables>
+    </Environment>
+  </Folder>
+</EnvironmentConfiguration>

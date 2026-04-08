@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:DTSID="{B8C9D0E1-F2A3-1B2C-5D6E-7F8A9B0C1D2E}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:ObjectName="Extract_Supplier_Files"
+  DTS:PackageType="5">
+  <DTS:Property DTS:Name="Description">Extracts supplier pricing CSV files from FTP share and loads to staging</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[Supplier_CSV]" DTS:CreationName="FLATFILE" DTS:ObjectName="Supplier_CSV">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">\\FTP-SHARE\suppliers\pricing_*.csv</DTS:Property>
+          <DTS:Property DTS:Name="Format">Delimited</DTS:Property>
+          <DTS:Property DTS:Name="ColumnNamesInFirstDataRow">true</DTS:Property>
+          <DTS:Property DTS:Name="TextQualifier">"</DTS:Property>
+          <DTS:Property DTS:Name="CodePage">1252</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[Staging_Target]" DTS:CreationName="OLEDB" DTS:ObjectName="Staging_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable DTS:ObjectName="FilePath" DTS:DataType="8">
+      <DTS:VariableValue DTS:DataType="8">\\FTP-SHARE\suppliers\</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <!-- ForEach Loop: Process all CSV files in directory -->
+    <DTS:Executable DTS:refId="Package\ForEach CSV File" DTS:ExecutableType="Microsoft.ForEachFileEnumerator">
+      <DTS:ObjectData>
+        <ForEachFileEnumerator FileSpec="pricing_*.csv" Folder="\\FTP-SHARE\suppliers\" />
+      </DTS:ObjectData>
+      
+      <DTS:Executables>
+        <DTS:Executable DTS:refId="Package\ForEach CSV File\Load File Data" DTS:ExecutableType="Microsoft.Pipeline">
+          <DTS:ObjectData>
+            <pipeline>
+              <components>
+                <component name="CSV File Source" componentClassID="Microsoft.FlatFileSource">
+                  <properties>
+                    <property name="ConnectionManager">Supplier_CSV</property>
+                  </properties>
+                  <outputs>
+                    <output name="Flat File Source Output">
+                      <outputColumns>
+                        <outputColumn name="SupplierID" dataType="System.String" length="50" />
+                        <outputColumn name="ProductID" dataType="System.String" length="50" />
+                        <outputColumn name="UnitCost" dataType="System.Decimal" precision="18" scale="2" />
+                        <outputColumn name="EffectiveDate" dataType="System.DateTime" />
+                      </outputColumns>
+                    </output>
+                  </outputs>
+                </component>
+                
+                <component name="Staging Destination" componentClassID="Microsoft.OLEDBDestination">
+                  <properties>
+                    <property name="TableName">staging.SupplierPricing</property>
+                  </properties>
+                  <inputs>
+                    <input refId="CSV File Source.Output" />
+                  </inputs>
+                </component>
+              </components>
+            </pipeline>
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+    </DTS:Executable>
+  </DTS:Executables>
+</DTS:Executable>

@@ -1,0 +1,101 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:DTSID="{D4E5F6A7-B8C9-7D8E-1F2A-3B4C5D6E7F8A}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:ObjectName="Extract_POS_Sales"
+  DTS:PackageType="5">
+  <DTS:Property DTS:Name="Description">Extracts sales transactions from POS SQL Server database to staging</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[POS_Source]" DTS:CreationName="OLEDB" DTS:ObjectName="POS_Source">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=POS-SERVER;Initial Catalog=POSTransactions;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[Staging_Target]" DTS:CreationName="OLEDB" DTS:ObjectName="Staging_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable DTS:ObjectName="LastExtractDate" DTS:DataType="7">
+      <DTS:VariableValue DTS:DataType="7">2024-01-14</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <!-- SQL Task: Get Last Extract Date for Incremental Load -->
+    <DTS:Executable DTS:refId="Package\Get Last Extract Date" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="Staging_Target"
+          SQLTask:SqlStatementSource="SELECT MAX(ExtractDate) FROM audit.ExtractLog WHERE SourceSystem = 'POS'"
+          SQLTask:ResultSet="2" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- Data Flow Task: Extract POS Sales -->
+    <DTS:Executable DTS:refId="Package\Extract Sales Data" DTS:ExecutableType="Microsoft.Pipeline">
+      <DTS:ObjectData>
+        <pipeline>
+          <components>
+            <!-- OLE DB Source -->
+            <component name="POS Sales Source" componentClassID="Microsoft.OLEDBSource">
+              <properties>
+                <property name="SqlCommand">
+                  SELECT TransactionID, StoreID, ProductID, CustomerID, TransactionDate, 
+                         Quantity, UnitPrice, Discount, TotalAmount
+                  FROM dbo.SalesTransactions
+                  WHERE TransactionDate &gt; ?
+                </property>
+                <property name="SqlCommandParam_0" dataType="System.DateTime" mappedVariable="User::LastExtractDate" />
+              </properties>
+              <outputs>
+                <output name="OLE DB Source Output" />
+              </outputs>
+            </component>
+            
+            <!-- Derived Column Transformation -->
+            <component name="Add Audit Columns" componentClassID="Microsoft.DerivedColumn">
+              <inputs>
+                <input refId="POS Sales Source.Output" />
+              </inputs>
+              <outputs>
+                <output name="Derived Column Output">
+                  <outputColumns>
+                    <outputColumn name="ExtractDate" dataType="System.DateTime" expression="GETDATE()" />
+                    <outputColumn name="SourceSystem" dataType="System.String" expression="&quot;POS&quot;" />
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            
+            <!-- OLE DB Destination -->
+            <component name="Staging Destination" componentClassID="Microsoft.OLEDBDestination">
+              <properties>
+                <property name="TableName">staging.POSSales</property>
+                <property name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              </properties>
+              <inputs>
+                <input refId="Add Audit Columns.Output" />
+              </inputs>
+            </component>
+          </components>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- SQL Task: Log Extract Completion -->
+    <DTS:Executable DTS:refId="Package\Log Extract" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="Staging_Target"
+          SQLTask:SqlStatementSource="INSERT INTO audit.ExtractLog (SourceSystem, ExtractDate, RowCount) VALUES ('POS', GETDATE(), ?)" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:From="Package\Get Last Extract Date" DTS:To="Package\Extract Sales Data" />
+    <DTS:PrecedenceConstraint DTS:From="Package\Extract Sales Data" DTS:To="Package\Log Extract" />
+  </DTS:PrecedenceConstraints>
+</DTS:Executable>

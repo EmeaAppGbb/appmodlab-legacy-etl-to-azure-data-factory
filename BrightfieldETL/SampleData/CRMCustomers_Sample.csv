@@ -1,0 +1,15 @@
+CustomerID,FirstName,LastName,Email,Phone,Address,City,State,ZipCode,Country,LoyaltyTier,LoyaltyPoints,Segment,CreatedDate,LastModifiedDate,IsActive
+CUST-5001,John,Smith,john.smith@email.com,555-0101,123 Main St,Seattle,WA,98101,USA,Gold,2500,High-Value,2023-01-15,2024-01-10,1
+CUST-5002,Sarah,Johnson,sarah.j@email.com,555-0102,456 Oak Ave,Portland,OR,97201,USA,Platinum,5200,VIP,2022-05-20,2024-01-12,1
+CUST-5003,Michael,Williams,m.williams@email.com,555-0103,789 Pine Rd,San Francisco,CA,94102,USA,Silver,1200,Medium,2023-07-10,2024-01-08,1
+CUST-5004,Emily,Brown,emily.brown@email.com,555-0104,321 Elm St,Los Angeles,CA,90001,USA,Bronze,450,Low,2023-11-05,2024-01-14,1
+CUST-5005,David,Davis,d.davis@email.com,555-0105,654 Maple Dr,San Diego,CA,92101,USA,Gold,3100,High-Value,2023-03-22,2024-01-11,1
+CUST-5006,Jennifer,Miller,jen.miller@email.com,555-0106,987 Cedar Ln,Phoenix,AZ,85001,USA,Silver,980,Medium,2023-08-15,2024-01-09,1
+CUST-5007,Robert,Wilson,rob.wilson@email.com,555-0107,147 Birch Ct,Denver,CO,80201,USA,Bronze,320,Low,2023-12-01,2024-01-13,1
+CUST-5008,Lisa,Moore,lisa.m@email.com,555-0108,258 Spruce Way,Austin,TX,78701,USA,Platinum,6800,VIP,2022-02-14,2024-01-15,1
+CUST-5009,James,Taylor,james.taylor@email.com,555-0109,369 Willow Blvd,Chicago,IL,60601,USA,Gold,2750,High-Value,2023-04-18,2024-01-07,1
+CUST-5010,Amanda,Anderson,amanda.a@email.com,555-0110,741 Ash Pkwy,Boston,MA,02101,USA,Silver,1450,Medium,2023-09-25,2024-01-06,1
+CUST-5011,Christopher,Thomas,chris.t@email.com,555-0111,852 Poplar St,Miami,FL,33101,USA,Bronze,280,Low,2023-10-30,2024-01-14,1
+CUST-5012,Michelle,Jackson,michelle.j@email.com,555-0112,963 Walnut Ave,Atlanta,GA,30301,USA,Gold,3400,High-Value,2023-02-08,2024-01-12,1
+CUST-5013,Daniel,White,dan.white@email.com,555-0113,159 Cherry Rd,Dallas,TX,75201,USA,Silver,1150,Medium,2023-06-12,2024-01-10,1
+CUST-5014,Jessica,Harris,jess.harris@email.com,555-0114,357 Beech Dr,Houston,TX,77001,USA,Bronze,510,Low,2023-11-20,2024-01-08,1

@@ -1,0 +1,95 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="2024-01-15T09:00:00"
+  DTS:DTSID="{A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="MasterOrchestrator"
+  DTS:PackageType="5"
+  DTS:VersionBuild="1"
+  DTS:VersionGUID="{B2C3D4E5-F6A7-5B6C-9D0E-1F2A3B4C5D6E}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:Property DTS:Name="Description">Master ETL orchestrator for Brightfield Retail Analytics - executes Extract, Transform, Load in sequence</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[DW_SQL_Server]"
+      DTS:CreationName="OLEDB"
+      DTS:DTSID="{C3D4E5F6-A7B8-6C7D-0E1F-2A3B4C5D6E7F}"
+      DTS:ObjectName="DW_SQL_Server">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager
+          DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;Auto Translate=False;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable DTS:ObjectName="BatchID" DTS:DataType="3">
+      <DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable DTS:ObjectName="ExecutionDate" DTS:DataType="7">
+      <DTS:VariableValue DTS:DataType="7">2024-01-15</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <!-- SQL Task: Initialize Audit Batch -->
+    <DTS:Executable DTS:refId="Package\Initialize Batch" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_SQL_Server"
+          SQLTask:SqlStatementSource="EXEC audit.InitializeBatch" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- Execute Package Task: Extract Phase -->
+    <DTS:Executable DTS:refId="Package\Extract Phase" DTS:ExecutableType="Microsoft.ExecutePackageTask">
+      <DTS:Property DTS:Name="Description">Executes all extraction packages</DTS:Property>
+      <DTS:ObjectData>
+        <ExecutePackageTask PackageName="Extract_POS_Sales.dtsx" />
+        <ExecutePackageTask PackageName="Extract_Inventory.dtsx" />
+        <ExecutePackageTask PackageName="Extract_CRM_Customers.dtsx" />
+        <ExecutePackageTask PackageName="Extract_Ecommerce_Orders.dtsx" />
+        <ExecutePackageTask PackageName="Extract_Supplier_Files.dtsx" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- Execute Package Task: Transform Phase -->
+    <DTS:Executable DTS:refId="Package\Transform Phase" DTS:ExecutableType="Microsoft.ExecutePackageTask">
+      <DTS:Property DTS:Name="Description">Executes all transformation packages</DTS:Property>
+      <DTS:ObjectData>
+        <ExecutePackageTask PackageName="Transform_DataQuality.dtsx" />
+        <ExecutePackageTask PackageName="Transform_TimeDim.dtsx" />
+        <ExecutePackageTask PackageName="Transform_CustomerDim.dtsx" />
+        <ExecutePackageTask PackageName="Transform_ProductDim.dtsx" />
+        <ExecutePackageTask PackageName="Transform_SalesFacts.dtsx" />
+        <ExecutePackageTask PackageName="Transform_InventoryFacts.dtsx" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- Execute Package Task: Load Phase -->
+    <DTS:Executable DTS:refId="Package\Load Phase" DTS:ExecutableType="Microsoft.ExecutePackageTask">
+      <DTS:Property DTS:Name="Description">Executes all load packages</DTS:Property>
+      <DTS:ObjectData>
+        <ExecutePackageTask PackageName="Load_Dimensions.dtsx" />
+        <ExecutePackageTask PackageName="Load_FactSales.dtsx" />
+        <ExecutePackageTask PackageName="Load_FactInventory.dtsx" />
+        <ExecutePackageTask PackageName="Load_Aggregations.dtsx" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- SQL Task: Complete Audit Batch -->
+    <DTS:Executable DTS:refId="Package\Complete Batch" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_SQL_Server"
+          SQLTask:SqlStatementSource="EXEC audit.CompleteBatch" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:From="Package\Initialize Batch" DTS:To="Package\Extract Phase" DTS:EvalOp="1" DTS:Value="0" />
+    <DTS:PrecedenceConstraint DTS:From="Package\Extract Phase" DTS:To="Package\Transform Phase" DTS:EvalOp="1" DTS:Value="0" />
+    <DTS:PrecedenceConstraint DTS:From="Package\Transform Phase" DTS:To="Package\Load Phase" DTS:EvalOp="1" DTS:Value="0" />
+    <DTS:PrecedenceConstraint DTS:From="Package\Load Phase" DTS:To="Package\Complete Batch" DTS:EvalOp="1" DTS:Value="0" />
+  </DTS:PrecedenceConstraints>
+</DTS:Executable>

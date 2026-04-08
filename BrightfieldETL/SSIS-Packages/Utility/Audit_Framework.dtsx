@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:DTSID="{A3B4C5D6-E7F8-6A7B-0C1D-2E3F4A5B6C7D}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:ObjectName="Audit_Framework"
+  DTS:PackageType="5">
+  <DTS:Property DTS:Name="Description">ETL audit logging framework - tracks batch execution, row counts, timing</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[DW_Connection]" DTS:CreationName="OLEDB" DTS:ObjectName="DW_Connection">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable DTS:ObjectName="PackageName" DTS:DataType="8" />
+    <DTS:Variable DTS:ObjectName="RowsProcessed" DTS:DataType="3" />
+    <DTS:Variable DTS:ObjectName="StartTime" DTS:DataType="7" />
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\Log Batch Start" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="
+            INSERT INTO audit.PackageExecution (PackageName, StartTime, Status)
+            VALUES (?, GETDATE(), 'Running')
+          " />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <DTS:Executable DTS:refId="Package\Log Batch End" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="
+            UPDATE audit.PackageExecution 
+            SET EndTime = GETDATE(), Status = 'Success', RowsProcessed = ?
+            WHERE PackageName = ? AND StartTime = ?
+          " />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+</DTS:Executable>

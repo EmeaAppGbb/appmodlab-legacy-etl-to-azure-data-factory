@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:DTSID="{A7B8C9D0-E1F2-0A1B-4C5D-6E7F8A9B0C1D}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:ObjectName="Extract_Ecommerce_Orders"
+  DTS:PackageType="5">
+  <DTS:Property DTS:Name="Description">Extracts e-commerce orders from REST API and loads to staging</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[Staging_Target]" DTS:CreationName="OLEDB" DTS:ObjectName="Staging_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable DTS:ObjectName="ApiEndpoint" DTS:DataType="8">
+      <DTS:VariableValue DTS:DataType="8">https://api.brightfield-ecommerce.com/v1/orders</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable DTS:ObjectName="ApiKey" DTS:DataType="8">
+      <DTS:VariableValue DTS:DataType="8">API_KEY_PLACEHOLDER</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <!-- Script Task: Call REST API and parse JSON -->
+    <DTS:Executable DTS:refId="Package\Call E-commerce API" DTS:ExecutableType="Microsoft.ScriptTask">
+      <DTS:Property DTS:Name="Description">C# script to call REST API, parse JSON, and write to staging table</DTS:Property>
+      <DTS:ObjectData>
+        <ScriptTaskData>
+          <ScriptProject>
+            <Code>
+              // C# Script Task - REST API Call
+              // Uses HttpClient to GET orders from e-commerce platform
+              // Parses JSON response and bulk inserts into staging.EcommerceOrders
+              // This is an anti-pattern - hard to unit test, maintain, and migrate to cloud
+              
+              public void Main()
+              {
+                  string apiUrl = Dts.Variables["User::ApiEndpoint"].Value.ToString();
+                  string apiKey = Dts.Variables["User::ApiKey"].Value.ToString();
+                  
+                  // HTTP GET request with API key authentication
+                  // Parse JSON array of orders
+                  // Insert into staging.EcommerceOrders table
+                  
+                  Dts.TaskResult = (int)ScriptResults.Success;
+              }
+            </Code>
+          </ScriptProject>
+        </ScriptTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <DTS:Executable DTS:refId="Package\Validate JSON Data" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="Staging_Target"
+          SQLTask:SqlStatementSource="EXEC staging.ValidateEcommerceOrders" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:From="Package\Call E-commerce API" DTS:To="Package\Validate JSON Data" />
+  </DTS:PrecedenceConstraints>
+</DTS:Executable>

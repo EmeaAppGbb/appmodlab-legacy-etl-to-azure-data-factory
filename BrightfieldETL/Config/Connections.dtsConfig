@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<DTSConfiguration>
+  <DTSConfigurationHeading>
+    <DTSConfigurationFileInfo GeneratedBy="BRIGHTFIELD\ETLAdmin" GeneratedFromPackageName="MasterOrchestrator" GeneratedDate="2024-01-15"/>
+  </DTSConfigurationHeading>
+  <Configuration ConfiguredType="Property" Path="\Package.Connections[DW_SQL_Server].Properties[ConnectionString]" ValueType="String">
+    <ConfiguredValue>Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;Auto Translate=False;</ConfiguredValue>
+  </Configuration>
+  <Configuration ConfiguredType="Property" Path="\Package.Connections[POS_Source].Properties[ConnectionString]" ValueType="String">
+    <ConfiguredValue>Data Source=POS-SERVER;Initial Catalog=POSTransactions;Provider=SQLNCLI11.1;Integrated Security=SSPI;</ConfiguredValue>
+  </Configuration>
+  <Configuration ConfiguredType="Property" Path="\Package.Connections[CRM_Source].Properties[ConnectionString]" ValueType="String">
+    <ConfiguredValue>Data Source=CRM-SERVER;Initial Catalog=CustomerCRM;Provider=SQLNCLI11.1;Integrated Security=SSPI;</ConfiguredValue>
+  </Configuration>
+  <Configuration ConfiguredType="Property" Path="\Package.Variables[User::FilePath].Properties[Value]" ValueType="String">
+    <ConfiguredValue>\\FTP-SHARE\suppliers\</ConfiguredValue>
+  </Configuration>
+  <Configuration ConfiguredType="Property" Path="\Package.Variables[User::ApiEndpoint].Properties[Value]" ValueType="String">
+    <ConfiguredValue>https://api.brightfield-ecommerce.com/v1/orders</ConfiguredValue>
+  </Configuration>
+  <Configuration ConfiguredType="Property" Path="\Package.Variables[User::ApiKey].Properties[Value]" ValueType="String">
+    <ConfiguredValue>CHANGE_ME_IN_PRODUCTION</ConfiguredValue>
+  </Configuration>
+</DTSConfiguration>

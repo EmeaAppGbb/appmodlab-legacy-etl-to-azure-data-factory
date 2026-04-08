@@ -1,0 +1,150 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:DTSID="{D0E1F2A3-B4C5-3D4E-7F8A-9B0C1D2E3F4A}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:ObjectName="Transform_SalesFacts"
+  DTS:PackageType="5">
+  <DTS:Property DTS:Name="Description">Transforms and enriches sales staging data into fact table format with surrogate key lookups</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[DW_Connection]" DTS:CreationName="OLEDB" DTS:ObjectName="DW_Connection">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\Transform Sales Facts" DTS:ExecutableType="Microsoft.Pipeline">
+      <DTS:ObjectData>
+        <pipeline>
+          <components>
+            <!-- Source: Staging Sales -->
+            <component name="Staging Sales Source" componentClassID="Microsoft.OLEDBSource">
+              <properties>
+                <property name="SqlCommand">
+                  SELECT TransactionID, StoreID, ProductID, CustomerID, TransactionDate,
+                         Quantity, UnitPrice, Discount, TotalAmount
+                  FROM staging.POSSales
+                  WHERE TransactionDate >= DATEADD(day, -1, GETDATE())
+                </property>
+              </properties>
+              <outputs>
+                <output name="OLE DB Source Output" />
+              </outputs>
+            </component>
+            
+            <!-- Lookup: Date Dimension -->
+            <component name="Lookup Date Key" componentClassID="Microsoft.Lookup">
+              <properties>
+                <property name="SqlCommand">SELECT DateKey, Date FROM dw.DimDate</property>
+                <property name="LookupColumn">Date</property>
+                <property name="SourceColumn">TransactionDate</property>
+                <property name="CacheMode">Full</property>
+              </properties>
+              <inputs>
+                <input refId="Staging Sales Source.Output" />
+              </inputs>
+              <outputs>
+                <output name="Lookup Match Output" />
+                <output name="Lookup No Match Output" errorRowDisposition="FailComponent" />
+              </outputs>
+            </component>
+            
+            <!-- Lookup: Store Dimension -->
+            <component name="Lookup Store Key" componentClassID="Microsoft.Lookup">
+              <properties>
+                <property name="SqlCommand">SELECT StoreKey, StoreID FROM dw.DimStore</property>
+                <property name="LookupColumn">StoreID</property>
+                <property name="SourceColumn">StoreID</property>
+              </properties>
+              <inputs>
+                <input refId="Lookup Date Key.Output" />
+              </inputs>
+              <outputs>
+                <output name="Lookup Match Output" />
+              </outputs>
+            </component>
+            
+            <!-- Lookup: Product Dimension -->
+            <component name="Lookup Product Key" componentClassID="Microsoft.Lookup">
+              <properties>
+                <property name="SqlCommand">SELECT ProductKey, ProductID FROM dw.DimProduct WHERE IsCurrent = 1</property>
+                <property name="LookupColumn">ProductID</property>
+                <property name="SourceColumn">ProductID</property>
+              </properties>
+              <inputs>
+                <input refId="Lookup Store Key.Output" />
+              </inputs>
+              <outputs>
+                <output name="Lookup Match Output" />
+              </outputs>
+            </component>
+            
+            <!-- Lookup: Customer Dimension (SCD Type 2 - get current record) -->
+            <component name="Lookup Customer Key" componentClassID="Microsoft.Lookup">
+              <properties>
+                <property name="SqlCommand">SELECT CustomerKey, CustomerID FROM dw.DimCustomer WHERE IsCurrent = 1</property>
+                <property name="LookupColumn">CustomerID</property>
+                <property name="SourceColumn">CustomerID</property>
+              </properties>
+              <inputs>
+                <input refId="Lookup Product Key.Output" />
+              </inputs>
+              <outputs>
+                <output name="Lookup Match Output" />
+              </outputs>
+            </component>
+            
+            <!-- Derived Column: Calculate revenue, cost, profit -->
+            <component name="Calculate Metrics" componentClassID="Microsoft.DerivedColumn">
+              <inputs>
+                <input refId="Lookup Customer Key.Output" />
+              </inputs>
+              <outputs>
+                <output name="Derived Column Output">
+                  <outputColumns>
+                    <outputColumn name="Revenue" dataType="System.Decimal" expression="Quantity * UnitPrice" />
+                    <outputColumn name="DiscountAmount" dataType="System.Decimal" expression="(Quantity * UnitPrice) * (Discount / 100.0)" />
+                    <outputColumn name="NetRevenue" dataType="System.Decimal" expression="Revenue - DiscountAmount" />
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            
+            <!-- Conditional Split: Route data quality issues to error output -->
+            <component name="Data Quality Check" componentClassID="Microsoft.ConditionalSplit">
+              <inputs>
+                <input refId="Calculate Metrics.Output" />
+              </inputs>
+              <outputs>
+                <output name="Valid Sales" expression="Quantity &gt; 0 &amp;&amp; UnitPrice &gt; 0" />
+                <output name="Invalid Sales - Error" expression="Quantity &lt;= 0 || UnitPrice &lt;= 0" />
+              </outputs>
+            </component>
+            
+            <!-- Destination: Fact Sales Table -->
+            <component name="FactSales Destination" componentClassID="Microsoft.OLEDBDestination">
+              <properties>
+                <property name="TableName">dw.FactSales</property>
+                <property name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              </properties>
+              <inputs>
+                <input refId="Data Quality Check.Valid Sales Output" />
+              </inputs>
+            </component>
+            
+            <!-- Error Destination: Log invalid rows -->
+            <component name="Error Log Destination" componentClassID="Microsoft.FlatFileDestination">
+              <properties>
+                <property name="FileName">C:\ETLErrors\InvalidSales_${ExecutionDate}.txt</property>
+              </properties>
+              <inputs>
+                <input refId="Data Quality Check.Invalid Sales Output" />
+              </inputs>
+            </component>
+          </components>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+</DTS:Executable>

@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:DTSID="{E1F2A3B4-C5D6-4E5F-8A9B-0C1D2E3F4A5B}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:ObjectName="Transform_DataQuality"
+  DTS:PackageType="5">
+  <DTS:Property DTS:Name="Description">Applies data quality rules and cleansing to all staging tables</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[DW_Connection]" DTS:CreationName="OLEDB" DTS:ObjectName="DW_Connection">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <!-- Script Task: Complex data quality rules in C# -->
+    <DTS:Executable DTS:refId="Package\Apply DQ Rules" DTS:ExecutableType="Microsoft.ScriptTask">
+      <DTS:Property DTS:Name="Description">Applies business rules for data quality validation</DTS:Property>
+      <DTS:ObjectData>
+        <ScriptTaskData>
+          <Code>
+            // C# Script Task - Data Quality Rules
+            // This is an anti-pattern: hard to maintain, no unit testing
+            
+            public void Main()
+            {
+                // Rule 1: Email format validation
+                // Rule 2: Phone number standardization
+                // Rule 3: Null handling for optional fields
+                // Rule 4: Cross-field validation (e.g., EndDate > StartDate)
+                // Rule 5: Referential integrity checks
+                
+                // Mark invalid records in staging tables
+                // Log data quality issues to audit table
+                
+                Dts.TaskResult = (int)ScriptResults.Success;
+            }
+          </Code>
+        </ScriptTaskData>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <DTS:Executable DTS:refId="Package\Standardize Addresses" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="EXEC dq.StandardizeAddresses" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <DTS:Executable DTS:refId="Package\Deduplicate Records" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="EXEC dq.DeduplicateCustomers" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:From="Package\Apply DQ Rules" DTS:To="Package\Standardize Addresses" />
+    <DTS:PrecedenceConstraint DTS:From="Package\Standardize Addresses" DTS:To="Package\Deduplicate Records" />
+  </DTS:PrecedenceConstraints>
+</DTS:Executable>

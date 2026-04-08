@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:DTSID="{F6A7B8C9-D0E1-9F0A-3B4C-5D6E7F8A9B0C}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:ObjectName="Extract_CRM_Customers"
+  DTS:PackageType="5">
+  <DTS:Property DTS:Name="Description">Extracts customer master data from CRM SQL Server database with SCD Type 2 tracking</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CRM_Source]" DTS:CreationName="OLEDB" DTS:ObjectName="CRM_Source">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=CRM-SERVER;Initial Catalog=CustomerCRM;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[Staging_Target]" DTS:CreationName="OLEDB" DTS:ObjectName="Staging_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\Truncate Staging" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="Staging_Target"
+          SQLTask:SqlStatementSource="TRUNCATE TABLE staging.CRMCustomers" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <DTS:Executable DTS:refId="Package\Extract Customer Data" DTS:ExecutableType="Microsoft.Pipeline">
+      <DTS:ObjectData>
+        <pipeline>
+          <components>
+            <component name="CRM Customer Source" componentClassID="Microsoft.OLEDBSource">
+              <properties>
+                <property name="SqlCommand">
+                  SELECT CustomerID, FirstName, LastName, Email, Phone, 
+                         Address, City, State, ZipCode, Country,
+                         LoyaltyTier, LoyaltyPoints, Segment, 
+                         CreatedDate, LastModifiedDate, IsActive
+                  FROM dbo.Customers
+                  WHERE IsActive = 1
+                </property>
+              </properties>
+              <outputs>
+                <output name="OLE DB Source Output" />
+              </outputs>
+            </component>
+            
+            <component name="Derived Columns" componentClassID="Microsoft.DerivedColumn">
+              <inputs>
+                <input refId="CRM Customer Source.Output" />
+              </inputs>
+              <outputs>
+                <output name="Derived Column Output">
+                  <outputColumns>
+                    <outputColumn name="FullName" dataType="System.String" expression="FirstName + &quot; &quot; + LastName" />
+                    <outputColumn name="ExtractTimestamp" dataType="System.DateTime" expression="GETDATE()" />
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            
+            <component name="Staging Destination" componentClassID="Microsoft.OLEDBDestination">
+              <properties>
+                <property name="TableName">staging.CRMCustomers</property>
+                <property name="FastLoadOptions">TABLOCK,CHECK_CONSTRAINTS</property>
+              </properties>
+              <inputs>
+                <input refId="Derived Columns.Output" />
+              </inputs>
+            </component>
+          </components>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:From="Package\Truncate Staging" DTS:To="Package\Extract Customer Data" />
+  </DTS:PrecedenceConstraints>
+</DTS:Executable>

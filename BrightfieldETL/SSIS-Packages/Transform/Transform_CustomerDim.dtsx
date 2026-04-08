@@ -1,0 +1,105 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:DTSID="{C9D0E1F2-A3B4-2C3D-6E7F-8A9B0C1D2E3F}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:ObjectName="Transform_CustomerDim"
+  DTS:PackageType="5">
+  <DTS:Property DTS:Name="Description">Processes Customer dimension with SCD Type 2 logic (tracks historical changes)</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[DW_Connection]" DTS:CreationName="OLEDB" DTS:ObjectName="DW_Connection">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <!-- SQL Task: Call SCD Type 2 Stored Procedure -->
+    <DTS:Executable DTS:refId="Package\Process Customer SCD" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+          SQLTask:Connection="DW_Connection"
+          SQLTask:SqlStatementSource="EXEC dw.ProcessCustomerDimensionSCD2" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    
+    <!-- Alternative: Data Flow with Slowly Changing Dimension Component -->
+    <DTS:Executable DTS:refId="Package\SCD Data Flow" DTS:ExecutableType="Microsoft.Pipeline">
+      <DTS:ObjectData>
+        <pipeline>
+          <components>
+            <component name="Staging Source" componentClassID="Microsoft.OLEDBSource">
+              <properties>
+                <property name="SqlCommand">
+                  SELECT CustomerID, FullName, Email, Phone, Address, City, State, 
+                         LoyaltyTier, Segment, LastModifiedDate
+                  FROM staging.CRMCustomers
+                </property>
+              </properties>
+              <outputs>
+                <output name="OLE DB Source Output" />
+              </outputs>
+            </component>
+            
+            <!-- SCD Component - SSIS built-in Slowly Changing Dimension wizard output -->
+            <component name="Slowly Changing Dimension" componentClassID="Microsoft.SlowlyChangingDimension">
+              <properties>
+                <property name="DimensionTable">dw.DimCustomer</property>
+                <property name="BusinessKey">CustomerID</property>
+                <property name="ChangeType">Type2</property>
+                <property name="FixedAttributes">Email,Phone</property>
+                <property name="ChangingAttributes">LoyaltyTier,Segment,Address,City,State</property>
+                <property name="StartDateColumn">StartDate</property>
+                <property name="EndDateColumn">EndDate</property>
+                <property name="CurrentRowIndicator">IsCurrent</property>
+              </properties>
+              <inputs>
+                <input refId="Staging Source.Output" />
+              </inputs>
+              <outputs>
+                <output name="New Output" />
+                <output name="Unchanged Output" />
+                <output name="Fixed Attribute Output" />
+                <output name="Changing Attribute Output" />
+              </outputs>
+            </component>
+            
+            <!-- OLE DB Command: Update existing rows -->
+            <component name="Update Changing Attributes" componentClassID="Microsoft.OLEDBCommand">
+              <properties>
+                <property name="SqlCommand">
+                  UPDATE dw.DimCustomer 
+                  SET EndDate = GETDATE(), IsCurrent = 0 
+                  WHERE CustomerKey = ?
+                </property>
+              </properties>
+              <inputs>
+                <input refId="Slowly Changing Dimension.Changing Attribute Output" />
+              </inputs>
+            </component>
+            
+            <!-- Insert new rows for changed records -->
+            <component name="Insert New Versions" componentClassID="Microsoft.OLEDBDestination">
+              <properties>
+                <property name="TableName">dw.DimCustomer</property>
+              </properties>
+              <inputs>
+                <input refId="Slowly Changing Dimension.Changing Attribute Output" />
+              </inputs>
+            </component>
+            
+            <!-- Insert completely new customers -->
+            <component name="Insert New Customers" componentClassID="Microsoft.OLEDBDestination">
+              <properties>
+                <property name="TableName">dw.DimCustomer</property>
+              </properties>
+              <inputs>
+                <input refId="Slowly Changing Dimension.New Output" />
+              </inputs>
+            </component>
+          </components>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+</DTS:Executable>
