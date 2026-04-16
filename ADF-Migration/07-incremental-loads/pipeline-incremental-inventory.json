@@ -1,0 +1,265 @@
+{
+    "name": "PL_Incremental_Inventory",
+    "properties": {
+        "description": "Daily snapshot incremental load for Inventory Levels. Migrated from SSIS inventory extraction. Loads a full snapshot for the current date, replacing any existing snapshot for that date.",
+        "activities": [
+            {
+                "name": "LookupLastSnapshot",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlSource",
+                        "sqlReaderStoredProcedureName": "[adf].[usp_GetWatermark]",
+                        "storedProcedureParameters": {
+                            "TableName": {
+                                "type": "String",
+                                "value": "InventoryLevels"
+                            }
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_AzureSQL_Watermark",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "SetSnapshotDate",
+                "type": "SetVariable",
+                "dependsOn": [],
+                "typeProperties": {
+                    "variableName": "SnapshotDate",
+                    "value": {
+                        "value": "@formatDateTime(pipeline().parameters.SnapshotDate, 'yyyy-MM-dd')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "CheckSnapshotExists",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "SetSnapshotDate",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 10
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlSource",
+                        "sqlReaderQuery": {
+                            "value": "SELECT COUNT(*) AS SnapshotCount FROM staging.InventoryLevels WHERE SnapshotDate = '@{variables('SnapshotDate')}'",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_SinkSQL_StagingInventory",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "IfSnapshotNotLoaded",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "CheckSnapshotExists",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "LookupLastSnapshot",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@equals(activity('CheckSnapshotExists').output.firstRow.SnapshotCount, 0)",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "DeleteExistingSnapshot",
+                            "type": "SqlServerStoredProcedure",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.00:10:00",
+                                "retry": 1,
+                                "retryIntervalInSeconds": 30
+                            },
+                            "typeProperties": {
+                                "storedProcedureName": "[staging].[usp_DeleteInventorySnapshot]",
+                                "storedProcedureParameters": {
+                                    "SnapshotDate": {
+                                        "type": "DateTime",
+                                        "value": {
+                                            "value": "@variables('SnapshotDate')",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "LS_AzureSQL_BrightfieldDW",
+                                "type": "LinkedServiceReference"
+                            }
+                        },
+                        {
+                            "name": "CopyDailyInventorySnapshot",
+                            "type": "Copy",
+                            "dependsOn": [
+                                {
+                                    "activity": "DeleteExistingSnapshot",
+                                    "dependencyConditions": ["Succeeded"]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.01:00:00",
+                                "retry": 2,
+                                "retryIntervalInSeconds": 60
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "SqlSource",
+                                    "sqlReaderQuery": {
+                                        "value": "SELECT ProductID, WarehouseID, QuantityOnHand, QuantityReserved, QuantityAvailable, ReorderPoint, CAST('@{variables('SnapshotDate')}' AS DATE) AS SnapshotDate FROM dbo.InventoryLevels",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "sink": {
+                                    "type": "SqlSink",
+                                    "writeBehavior": "insert",
+                                    "preCopyScript": {
+                                        "value": "DELETE FROM staging.InventoryLevels WHERE SnapshotDate = '@{variables('SnapshotDate')}'",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "enableStaging": false,
+                                "parallelCopies": 4
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "DS_SourceSQL_Inventory",
+                                    "type": "DatasetReference"
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "DS_SinkSQL_StagingInventory",
+                                    "type": "DatasetReference"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "UpdateSnapshotWatermark",
+                            "type": "SqlServerStoredProcedure",
+                            "dependsOn": [
+                                {
+                                    "activity": "CopyDailyInventorySnapshot",
+                                    "dependencyConditions": ["Succeeded"]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:05:00",
+                                "retry": 2,
+                                "retryIntervalInSeconds": 30
+                            },
+                            "typeProperties": {
+                                "storedProcedureName": "[adf].[usp_UpdateWatermark]",
+                                "storedProcedureParameters": {
+                                    "TableName": {
+                                        "type": "String",
+                                        "value": "InventoryLevels"
+                                    },
+                                    "NewWatermark": {
+                                        "type": "DateTime",
+                                        "value": {
+                                            "value": "@variables('SnapshotDate')",
+                                            "type": "Expression"
+                                        }
+                                    },
+                                    "PipelineName": {
+                                        "type": "String",
+                                        "value": {
+                                            "value": "@pipeline().Pipeline",
+                                            "type": "Expression"
+                                        }
+                                    },
+                                    "RunStatus": {
+                                        "type": "String",
+                                        "value": "Succeeded"
+                                    },
+                                    "RowsProcessed": {
+                                        "type": "Int64",
+                                        "value": {
+                                            "value": "@activity('CopyDailyInventorySnapshot').output.rowsCopied",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "LS_AzureSQL_BrightfieldDW",
+                                "type": "LinkedServiceReference"
+                            }
+                        }
+                    ],
+                    "ifFalseActivities": [
+                        {
+                            "name": "LogSnapshotSkipped",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "typeProperties": {
+                                "variableName": "SkipReason",
+                                "value": {
+                                    "value": "Snapshot already exists for @{variables('SnapshotDate')}",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "parameters": {
+            "SnapshotDate": {
+                "type": "string",
+                "defaultValue": {
+                    "value": "@utcNow('yyyy-MM-dd')",
+                    "type": "Expression"
+                }
+            }
+        },
+        "variables": {
+            "SnapshotDate": {
+                "type": "String",
+                "defaultValue": ""
+            },
+            "SkipReason": {
+                "type": "String",
+                "defaultValue": ""
+            }
+        },
+        "annotations": [
+            "IncrementalLoad",
+            "Inventory",
+            "DailySnapshot",
+            "MigratedFromSSIS"
+        ],
+        "folder": {
+            "name": "IncrementalLoads"
+        }
+    }
+}

@@ -1,0 +1,262 @@
+{
+    "name": "PL_Incremental_CRM_CDC",
+    "properties": {
+        "description": "Change Data Capture (CDC) pattern for CRM Customer data. Migrated from SSIS timestamp-based incremental extraction. Captures inserts, updates, and soft-deletes from the CRM source using LastModifiedDate.",
+        "activities": [
+            {
+                "name": "LookupLastCDCWatermark",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlSource",
+                        "sqlReaderStoredProcedureName": "[adf].[usp_GetWatermark]",
+                        "storedProcedureParameters": {
+                            "TableName": {
+                                "type": "String",
+                                "value": "CRMCustomers"
+                            }
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_AzureSQL_Watermark",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "LookupCurrentMaxModified",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlSource",
+                        "sqlReaderQuery": "SELECT MAX(LastModifiedDate) AS NewWatermarkValue FROM dbo.Customers"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_SourceSQL_CRMCustomers",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "CheckForChanges",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "LookupLastCDCWatermark",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "LookupCurrentMaxModified",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 10
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlSource",
+                        "sqlReaderQuery": {
+                            "value": "SELECT COUNT(*) AS ChangeCount FROM dbo.Customers WHERE LastModifiedDate > '@{activity('LookupLastCDCWatermark').output.firstRow.WatermarkValue}' AND LastModifiedDate <= '@{activity('LookupCurrentMaxModified').output.firstRow.NewWatermarkValue}'",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_SourceSQL_CRMCustomers",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "IfChangesExist",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "CheckForChanges",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@greater(activity('CheckForChanges').output.firstRow.ChangeCount, 0)",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "CopyCDCChanges",
+                            "type": "Copy",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.01:00:00",
+                                "retry": 2,
+                                "retryIntervalInSeconds": 60
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "SqlSource",
+                                    "sqlReaderQuery": {
+                                        "value": "SELECT CustomerID, FirstName, LastName, Email, Phone, LastModifiedDate, CASE WHEN IsDeleted = 1 THEN 'D' WHEN CreatedDate = LastModifiedDate THEN 'I' ELSE 'U' END AS CDC_Operation FROM dbo.Customers WHERE LastModifiedDate > '@{activity('LookupLastCDCWatermark').output.firstRow.WatermarkValue}' AND LastModifiedDate <= '@{activity('LookupCurrentMaxModified').output.firstRow.NewWatermarkValue}' ORDER BY LastModifiedDate",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "sink": {
+                                    "type": "SqlSink",
+                                    "writeBehavior": "upsert",
+                                    "upsertSettings": {
+                                        "useTempDB": true,
+                                        "keys": ["CustomerID"]
+                                    }
+                                },
+                                "enableStaging": false,
+                                "parallelCopies": 4
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "DS_SourceSQL_CRMCustomers",
+                                    "type": "DatasetReference"
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "DS_SinkSQL_StagingCRMCustomers",
+                                    "type": "DatasetReference"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ApplyCDCToTarget",
+                            "type": "SqlServerStoredProcedure",
+                            "dependsOn": [
+                                {
+                                    "activity": "CopyCDCChanges",
+                                    "dependencyConditions": ["Succeeded"]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:30:00",
+                                "retry": 1,
+                                "retryIntervalInSeconds": 30
+                            },
+                            "typeProperties": {
+                                "storedProcedureName": "[dbo].[usp_ApplyCustomerCDC]",
+                                "storedProcedureParameters": {
+                                    "BatchId": {
+                                        "type": "String",
+                                        "value": {
+                                            "value": "@pipeline().RunId",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "LS_AzureSQL_BrightfieldDW",
+                                "type": "LinkedServiceReference"
+                            }
+                        },
+                        {
+                            "name": "UpdateCDCWatermark",
+                            "type": "SqlServerStoredProcedure",
+                            "dependsOn": [
+                                {
+                                    "activity": "ApplyCDCToTarget",
+                                    "dependencyConditions": ["Succeeded"]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:05:00",
+                                "retry": 2,
+                                "retryIntervalInSeconds": 30
+                            },
+                            "typeProperties": {
+                                "storedProcedureName": "[adf].[usp_UpdateWatermark]",
+                                "storedProcedureParameters": {
+                                    "TableName": {
+                                        "type": "String",
+                                        "value": "CRMCustomers"
+                                    },
+                                    "NewWatermark": {
+                                        "type": "DateTime",
+                                        "value": {
+                                            "value": "@activity('LookupCurrentMaxModified').output.firstRow.NewWatermarkValue",
+                                            "type": "Expression"
+                                        }
+                                    },
+                                    "PipelineName": {
+                                        "type": "String",
+                                        "value": {
+                                            "value": "@pipeline().Pipeline",
+                                            "type": "Expression"
+                                        }
+                                    },
+                                    "RunStatus": {
+                                        "type": "String",
+                                        "value": "Succeeded"
+                                    },
+                                    "RowsProcessed": {
+                                        "type": "Int64",
+                                        "value": {
+                                            "value": "@activity('CopyCDCChanges').output.rowsCopied",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "LS_AzureSQL_BrightfieldDW",
+                                "type": "LinkedServiceReference"
+                            }
+                        }
+                    ],
+                    "ifFalseActivities": [
+                        {
+                            "name": "LogNoChangesDetected",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "typeProperties": {
+                                "variableName": "NoChangesMessage",
+                                "value": {
+                                    "value": "No CRM changes detected since @{activity('LookupLastCDCWatermark').output.firstRow.WatermarkValue}",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "variables": {
+            "NoChangesMessage": {
+                "type": "String",
+                "defaultValue": ""
+            }
+        },
+        "annotations": [
+            "IncrementalLoad",
+            "CRM",
+            "CDC",
+            "ChangeDataCapture",
+            "MigratedFromSSIS"
+        ],
+        "folder": {
+            "name": "IncrementalLoads"
+        }
+    }
+}

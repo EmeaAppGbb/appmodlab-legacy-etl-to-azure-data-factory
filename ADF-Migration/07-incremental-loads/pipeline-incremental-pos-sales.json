@@ -1,0 +1,243 @@
+{
+    "name": "PL_Incremental_POS_Sales",
+    "properties": {
+        "description": "Watermark-based incremental load for POS Sales data. Migrated from SSIS Extract_POS_Sales package. Pattern: Lookup old watermark -> Get new watermark from source -> Copy delta -> Update watermark.",
+        "activities": [
+            {
+                "name": "LookupOldWatermark",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlSource",
+                        "sqlReaderStoredProcedureName": "[adf].[usp_GetWatermark]",
+                        "storedProcedureParameters": {
+                            "TableName": {
+                                "type": "String",
+                                "value": "POSSales"
+                            }
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_AzureSQL_Watermark",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "LookupNewWatermark",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlSource",
+                        "sqlReaderQuery": "SELECT MAX(TransactionDate) AS NewWatermarkValue FROM dbo.POSSales"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_SourceSQL_POSSales",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "RecordRunStart",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                    {
+                        "activity": "LookupOldWatermark",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:02:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 10
+                },
+                "typeProperties": {
+                    "storedProcedureName": "[adf].[usp_RecordRunStart]",
+                    "storedProcedureParameters": {
+                        "TableName": {
+                            "type": "String",
+                            "value": "POSSales"
+                        },
+                        "PipelineName": {
+                            "type": "String",
+                            "value": {
+                                "value": "@pipeline().Pipeline",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                },
+                "linkedServiceName": {
+                    "referenceName": "LS_AzureSQL_BrightfieldDW",
+                    "type": "LinkedServiceReference"
+                }
+            },
+            {
+                "name": "CopyIncrementalPOSSales",
+                "type": "Copy",
+                "dependsOn": [
+                    {
+                        "activity": "LookupOldWatermark",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "LookupNewWatermark",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "RecordRunStart",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.01:00:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 60
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlSource",
+                        "sqlReaderQuery": {
+                            "value": "SELECT * FROM dbo.POSSales WHERE TransactionDate > '@{activity('LookupOldWatermark').output.firstRow.WatermarkValue}' AND TransactionDate <= '@{activity('LookupNewWatermark').output.firstRow.NewWatermarkValue}'",
+                            "type": "Expression"
+                        }
+                    },
+                    "sink": {
+                        "type": "SqlSink",
+                        "sqlWriterStoredProcedureName": "[staging].[usp_UpsertPOSSales]",
+                        "sqlWriterTableType": "staging.POSSalesTableType",
+                        "storedProcedureTableTypeParameterName": "POSSalesData",
+                        "writeBehavior": "upsert",
+                        "upsertSettings": {
+                            "useTempDB": true,
+                            "keys": ["TransactionID"]
+                        }
+                    },
+                    "enableStaging": false,
+                    "parallelCopies": 4,
+                    "dataIntegrationUnits": 8
+                },
+                "inputs": [
+                    {
+                        "referenceName": "DS_SourceSQL_POSSales",
+                        "type": "DatasetReference"
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "DS_SinkSQL_StagingPOSSales",
+                        "type": "DatasetReference"
+                    }
+                ]
+            },
+            {
+                "name": "UpdateWatermark",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                    {
+                        "activity": "CopyIncrementalPOSSales",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "storedProcedureName": "[adf].[usp_UpdateWatermark]",
+                    "storedProcedureParameters": {
+                        "TableName": {
+                            "type": "String",
+                            "value": "POSSales"
+                        },
+                        "NewWatermark": {
+                            "type": "DateTime",
+                            "value": {
+                                "value": "@activity('LookupNewWatermark').output.firstRow.NewWatermarkValue",
+                                "type": "Expression"
+                            }
+                        },
+                        "PipelineName": {
+                            "type": "String",
+                            "value": {
+                                "value": "@pipeline().Pipeline",
+                                "type": "Expression"
+                            }
+                        },
+                        "RunStatus": {
+                            "type": "String",
+                            "value": "Succeeded"
+                        },
+                        "RowsProcessed": {
+                            "type": "Int64",
+                            "value": {
+                                "value": "@activity('CopyIncrementalPOSSales').output.rowsCopied",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                },
+                "linkedServiceName": {
+                    "referenceName": "LS_AzureSQL_BrightfieldDW",
+                    "type": "LinkedServiceReference"
+                }
+            },
+            {
+                "name": "FailureNotification",
+                "type": "WebActivity",
+                "dependsOn": [
+                    {
+                        "activity": "CopyIncrementalPOSSales",
+                        "dependencyConditions": ["Failed"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:02:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 10
+                },
+                "typeProperties": {
+                    "url": {
+                        "value": "@pipeline().parameters.AlertWebhookUrl",
+                        "type": "Expression"
+                    },
+                    "method": "POST",
+                    "body": {
+                        "value": "@json(concat('{\"pipeline\":\"', pipeline().Pipeline, '\",\"table\":\"POSSales\",\"error\":\"', activity('CopyIncrementalPOSSales').error.message, '\",\"runId\":\"', pipeline().RunId, '\"}'))",
+                        "type": "Expression"
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "AlertWebhookUrl": {
+                "type": "string",
+                "defaultValue": "https://placeholder.logic.azure.com/workflows/alert"
+            }
+        },
+        "annotations": [
+            "IncrementalLoad",
+            "POSSales",
+            "Watermark",
+            "MigratedFromSSIS"
+        ],
+        "folder": {
+            "name": "IncrementalLoads"
+        }
+    }
+}

@@ -1,0 +1,56 @@
+ÔùÅ List directory BrightfieldETL\SQL\IncrementalLoad
+  Ôöö 1 file found
+
+ÔùÅ Read 01_Incremental_Load_Patterns.sql
+  Ôöé BrightfieldETL\SQL\IncrementalLoad\01_Incremental_Load_Patterns.sql
+  Ôöö 134 lines read
+
+Now I understand the legacy patterns. Let me create the directory and all files.
+
+ÔùÅ Create incremental loads directory (shell)
+  Ôöé New-Item -ItemType Directory -Path "C:\code\gbb\labs\appmodlab-legacy-etl-to
+  Ôöé -azure-data-factory\ADF-Migration\07-incremental-loads" -Force | Out-Null;
+  Ôöé Write-Output "Created"
+  Ôöö 2 lines...
+
+ÔùÅ Create watermark-setup.sql +164
+  Ôöö ADF-Migration\07-incremental-loads\watermark-setup.sql
+
+ÔùÅ Create pipeline-incremental-crm-cdc.json +263
+  Ôöö ADF-Migration\07-incremental-loads\pipeline-incremental-crm-cdc.json
+
+ÔùÅ Create pipeline-incremental-inventory.json +266
+  Ôöö ADF-Migration\07-incremental-loads\pipeline-incremental-inventory.json
+
+ÔùÅ Create pipeline-incremental-pos-sales.json +244
+  Ôöö ADF-Migration\07-incremental-loads\pipeline-incremental-pos-sales.json
+
+ÔùÅ Create incremental-load-patterns.md +162
+  Ôöö ADF-Migration\07-incremental-loads\incremental-load-patterns.md
+
+Let me verify the JSON files are valid:
+
+ÔùÅ Verify created files and JSON validity (shell)
+  Ôöé $dir = "C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-factory\ADF-Mi
+  Ôöé gration\07-incremental-loads"
+  Ôöé Get-ChildItem $dir | ForEach-Object { Write-Output "$($_.Name)
+  Ôöé ($($_.Length) bytes)" }
+  Ôöé Write-Output ""ÔÇª
+  Ôöö 13 lines...
+
+All 5 files created and validated in `ADF-Migration/07-incremental-loads/`:
+
+| File | Pattern |
+|------|---------|
+| `pipeline-incremental-pos-sales.json` | Watermark-based: Lookup ÔåÆ Copy delta ÔåÆ StoredProcedure (update watermark) + failure alert |
+| `pipeline-incremental-inventory.json` | Daily snapshot with idempotency check ÔÇö skips if already loaded |
+| `pipeline-incremental-crm-cdc.json` | CDC pattern classifying rows as I/U/D, with change detection gate |
+| `watermark-setup.sql` | Creates `adf.IncrementalWatermark` table, `usp_GetWatermark`, `usp_UpdateWatermark`, `usp_RecordRunStart`, and monitoring view |
+| `incremental-load-patterns.md` | Full documentation mapping each legacy SSIS pattern to its ADF equivalent |
+
+All three pipelines share the centralized watermark table and stored procedures from the legacy `audit.WatermarkTable`, upgraded from `SQL_VARIANT` to `DATETIME2(7)` with added observability columns.
+
+
+Changes   +1099 -0
+Requests  3 Premium (2m 44s)
+Tokens    Ôåæ 186.1k ÔÇó Ôåô 12.7k ÔÇó 152.1k (cached)
