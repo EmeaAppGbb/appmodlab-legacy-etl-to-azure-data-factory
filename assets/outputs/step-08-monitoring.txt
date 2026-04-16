@@ -1,0 +1,45 @@
+ÔùÅ List directory ADF-Migration
+  Ôöö 7 files found
+
+ÔùÅ Create 08-monitoring directory (shell)
+  Ôöé New-Item -ItemType Directory -Path "C:\code\gbb\labs\appmodlab-legacy-etl-to
+  Ôöé -azure-data-factory\ADF-Migration\08-monitoring" -Force | Out-Null;
+  Ôöé Write-Host "Created"
+  Ôöö 2 lines...
+
+Now I'll create all 5 files in parallel:
+
+ÔùÅ Create alert-rules.bicep +276
+  Ôöö ADF-Migration\08-monitoring\alert-rules.bicep
+
+ÔùÅ Create diagnostic-settings.bicep +120
+  Ôöö ADF-Migration\08-monitoring\diagnostic-settings.bicep
+
+ÔùÅ Create log-analytics-queries.md +266
+  Ôöö ADF-Migration\08-monitoring\log-analytics-queries.md
+
+ÔùÅ Create runbook-alert-handler.ps1 +386
+  Ôöö ADF-Migration\08-monitoring\runbook-alert-handler.ps1
+
+ÔùÅ Create dashboard.json +233
+  Ôöö ADF-Migration\08-monitoring\dashboard.json
+
+Let me verify the directory structure:
+
+ÔùÅ List directory ADF-Migration\08-monitoring
+  Ôöö 5 files found
+
+All 5 files created in `ADF-Migration/08-monitoring/`:
+
+| File | Contents |
+|------|----------|
+| **alert-rules.bicep** | 6 alert rules ÔÇö pipeline failures, activity failures, long-running pipelines, data quality breaches, consecutive failures, IR node unavailability |
+| **diagnostic-settings.bicep** | Sends ADF logs/metrics to Log Analytics, with optional Storage Account archival and Event Hub streaming |
+| **dashboard.json** | Azure Dashboard with 7 tiles ÔÇö pipeline run status, activity durations (avg/P95), error rates, row counts, data volume, running pipelines, daily success rate |
+| **log-analytics-queries.md** | 17 KQL queries across 5 categories: failed pipelines, slow activities, data volume trends, error patterns, operational overview |
+| **runbook-alert-handler.ps1** | Automation runbook that parses alert webhooks, retrieves failure details, auto-retries transient errors, sends Teams notifications, and logs incident records |
+
+
+Changes   +1281 -0
+Requests  3 Premium (3m 0s)
+Tokens    Ôåæ 157.2k ÔÇó Ôåô 13.7k ÔÇó 124.8k (cached)
