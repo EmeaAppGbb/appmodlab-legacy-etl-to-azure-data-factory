@@ -1,0 +1,125 @@
+ÔùÅ List directory .
+  Ôöö 6 files found
+
+ÔùÅ Search (glob)
+  Ôöé "BrightfieldETL/Config/**/*"
+  Ôöö 2 files found
+
+ÔùÅ Search (glob)
+  Ôöé "BrightfieldETL/**/*.sql"
+  Ôöö 5 files found
+
+ÔùÅ Search (glob)
+  Ôöé "BrightfieldETL/**/*.dtsx"
+  Ôöö 11 files found
+
+Now let me read all these files in parallel:
+
+ÔùÅ Read Load_FactSales.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Load\Load_FactSales.dtsx
+  Ôöö 71 lines read
+
+ÔùÅ Read Extract_POS_Sales.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_POS_Sales.dtsx
+  Ôöö 101 lines read
+
+ÔùÅ Read Extract_Inventory.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_Inventory.dtsx
+  Ôöö 66 lines read
+
+ÔùÅ Read Extract_CRM_Customers.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_CRM_Customers.dtsx
+  Ôöö 81 lines read
+
+ÔùÅ Read Transform_SalesFacts.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Transform\Transform_SalesFacts.dtsx
+  Ôöö 150 lines read
+
+ÔùÅ Read Transform_DataQuality.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Transform\Transform_DataQuality.dtsx
+  Ôöö 64 lines read
+
+ÔùÅ Read Transform_CustomerDim.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Transform\Transform_CustomerDim.dtsx
+  Ôöö 105 lines read
+
+ÔùÅ Read MasterOrchestrator.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Master\MasterOrchestrator.dtsx
+  Ôöö 95 lines read
+
+ÔùÅ Read Extract_Supplier_Files.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_Supplier_Files.dtsx
+  Ôöö 75 lines read
+
+ÔùÅ Read Audit_Framework.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Utility\Audit_Framework.dtsx
+  Ôöö 45 lines read
+
+ÔùÅ Read Extract_Ecommerce_Orders.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_Ecommerce_Orders.dtsx
+  Ôöö 65 lines read
+
+Now let me read all SQL and config files:
+
+ÔùÅ Read 01_Create_Staging_Tables.sql
+  Ôöé BrightfieldETL\SQL\StagingTables\01_Create_Staging_Tables.sql
+  Ôöö 136 lines read
+
+ÔùÅ Read 02_Create_Audit_Tables.sql
+  Ôöé BrightfieldETL\SQL\DataWarehouse\02_Create_Audit_Tables.sql
+  Ôöö 77 lines read
+
+ÔùÅ Read 01_Incremental_Load_Patterns.sql
+  Ôöé BrightfieldETL\SQL\IncrementalLoad\01_Incremental_Load_Patterns.sql
+  Ôöö 134 lines read
+
+ÔùÅ Read 01_ETL_Stored_Procedures.sql
+  Ôöé BrightfieldETL\SQL\StoredProcedures\01_ETL_Stored_Procedures.sql
+  Ôöö 218 lines read
+
+ÔùÅ Read 01_Create_DataWarehouse_Schema.sql
+  Ôöé BrightfieldETL\SQL\DataWarehouse\01_Create_DataWarehouse_Schema.sql
+  Ôöö 209 lines read
+
+ÔùÅ Read Connections.dtsConfig
+  Ôöé BrightfieldETL\Config\Connections.dtsConfig
+  Ôöö 24 lines read
+
+ÔùÅ Read Environment.xml
+  Ôöé BrightfieldETL\Config\Environment.xml
+  Ôöö 31 lines read
+
+Now I have all the data. Let me create the directory and both assessment files.
+
+ÔùÅ Create assessment directory (shell)
+  Ôöé New-Item -ItemType Directory -Path "C:\code\gbb\labs\appmodlab-legacy-etl-to
+  Ôöé -azure-data-factory\ADF-Migration\01-assessment" -Force
+  Ôöö 4 lines...
+
+ÔùÅ Create ssis-package-inventory.md +200
+  Ôöö ADF-Migration\01-assessment\ssis-package-inventory.md
+
+ÔùÅ Create source-to-target-mapping.md +224
+  Ôöö ADF-Migration\01-assessment\source-to-target-mapping.md
+
+Both assessment documents have been created in `ADF-Migration/01-assessment/`:
+
+**1. `ssis-package-inventory.md`** contains:
+- **11-package inventory table** with source, destination, transformations, dependencies, and complexity ratings (2 Low, 4 Med, 5 High)
+- **6 missing/stub packages** referenced by the orchestrator but not in repo
+- **Text-based dependency diagram** showing the EÔåÆTÔåÆL flow
+- **13 anti-patterns** mapped to ADF equivalents (Script Tasks ÔåÆ REST/Data Flow, hardcoded strings ÔåÆ Key Vault, SCD wizard ÔåÆ Mapping Data Flow, etc.)
+- **9-wave migration order** (Audit ÔåÆ simple extracts ÔåÆ Oracle ÔåÆ files ÔåÆ REST ÔåÆ transforms ÔåÆ loads ÔåÆ orchestrator)
+- **Connection inventory** and **environment config** tables
+
+**2. `source-to-target-mapping.md`** contains:
+- **10 mapping sections** covering all stagingÔåÆDW and sourceÔåÆstaging flows
+- **Column-level mappings** for POSSalesÔåÆFactSales (16 cols), CRMCustomersÔåÆDimCustomer SCD2 (18 cols), InventoryLevelsÔåÆFactInventory, SupplierPricingÔåÆDimProduct, EcommerceOrdersÔåÆFactSales
+- **SCD Type 2 logic** documented (expire/insert-new/insert-new-customer)
+- **Data type conversions** (Oracle NUMBERÔåÆSQL INT, CSVÔåÆSQL)
+- **Data lineage diagram** from source systems through staging and transforms to the star schema
+
+
+Changes   +424 -0
+Requests  3 Premium (3m 26s)
+Tokens    Ôåæ 287.8k ÔÇó Ôåô 11.7k ÔÇó 204.9k (cached)
