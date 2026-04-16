@@ -1,0 +1,46 @@
+ÔùÅ Read Transform_CustomerDim.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Transform\Transform_CustomerDim.dtsx
+  Ôöö 105 lines read
+
+ÔùÅ Read 01_ETL_Stored_Procedures.sql
+  Ôöé BrightfieldETL\SQL\StoredProcedures\01_ETL_Stored_Procedures.sql
+  Ôöö 218 lines read
+
+Now I have the full SCD2 logic. Let me create the directory and all three files.
+
+ÔùÅ Create SCD Type 2 directory (shell)
+  Ôöé New-Item -ItemType Directory -Path "C:\code\gbb\labs\appmodlab-legacy-etl-to
+  Ôöé -azure-data-factory\ADF-Migration\05-scd-type2" -Force
+  Ôöö 4 lines...
+
+ÔùÅ Create dataflow-scd2-customer.json +411
+  Ôöö ADF-Migration\05-scd-type2\dataflow-scd2-customer.json
+
+ÔùÅ Create scd2-validation.sql +156
+  Ôöö ADF-Migration\05-scd-type2\scd2-validation.sql
+
+ÔùÅ Create scd2-test-data.sql +181
+  Ôöö ADF-Migration\05-scd-type2\scd2-test-data.sql
+
+Verify the files are in place:
+
+ÔùÅ List directory ADF-Migration\05-scd-type2
+  Ôöö 3 files found
+
+All 3 files created in `ADF-Migration/05-scd-type2/`:
+
+1. **dataflow-scd2-customer.json** ÔÇö Full ADF Mapping Data Flow with:
+   - Two sources (staging CRMCustomers + current DimCustomer)
+   - `Exists` ÔåÆ `Join` ÔåÆ `ConditionalSplit` (Changed/Unchanged)
+   - **Changed path**: `DerivedColumn`(EndDate=today, IsCurrent=0) ÔåÆ `AlterRow`(update) ÔåÆ Sink
+   - **New + Changed path**: `Union` ÔåÆ `DerivedColumn`(StartDate=today, EndDate=9999-12-31, IsCurrent=1) ÔåÆ `AlterRow`(insert) ÔåÆ Sink
+   - Includes complete Data Flow Script and migration notes mapping each SP step
+
+2. **scd2-test-data.sql** ÔÇö 4 test scenarios: new customer insert, attribute change (2 rows expected), unchanged customer (no change), and reactivation with 2 successive changes (3 history rows)
+
+3. **scd2-validation.sql** ÔÇö 7 validation queries: overlapping date ranges, IsCurrent consistency, current row EndDate, expired row EndDate, staging vs dim row counts, temporal ordering, and summary statistics
+
+
+Changes   +748 -0
+Requests  3 Premium (2m 23s)
+Tokens    Ôåæ 172.7k ÔÇó Ôåô 10.5k ÔÇó 134.2k (cached)

@@ -1,0 +1,410 @@
+{
+    "name": "df_SCD2_CustomerDimension",
+    "description": "ADF Mapping Data Flow implementing SCD Type 2 for DimCustomer. Migrated from SSIS Transform_CustomerDim.dtsx and stored procedure dw.ProcessCustomerDimensionSCD2.",
+    "properties": {
+        "type": "MappingDataFlow",
+        "typeProperties": {
+            "sources": [
+                {
+                    "name": "StagingCustomers",
+                    "description": "Source: staging.CRMCustomers - incoming customer records from CRM extract",
+                    "dataset": {
+                        "referenceName": "ds_AzureSql_StagingCRMCustomers",
+                        "type": "DatasetReference"
+                    },
+                    "schemaMapping": {
+                        "CustomerID": "integer",
+                        "FullName": "string",
+                        "Email": "string",
+                        "Phone": "string",
+                        "Address": "string",
+                        "City": "string",
+                        "State": "string",
+                        "ZipCode": "string",
+                        "Country": "string",
+                        "Segment": "string",
+                        "LoyaltyTier": "string",
+                        "LoyaltyPoints": "integer",
+                        "LastModifiedDate": "timestamp"
+                    }
+                },
+                {
+                    "name": "CurrentDimCustomer",
+                    "description": "Source: dw.DimCustomer WHERE IsCurrent = 1 - current dimension records for comparison",
+                    "dataset": {
+                        "referenceName": "ds_AzureSql_DimCustomer",
+                        "type": "DatasetReference"
+                    },
+                    "query": "SELECT CustomerKey, CustomerID, FullName, Email, Phone, Address, City, State, ZipCode, Country, Segment, LoyaltyTier, LoyaltyPoints, StartDate, EndDate, IsCurrent FROM dw.DimCustomer WHERE IsCurrent = 1",
+                    "schemaMapping": {
+                        "CustomerKey": "integer",
+                        "CustomerID": "integer",
+                        "FullName": "string",
+                        "Email": "string",
+                        "Phone": "string",
+                        "Address": "string",
+                        "City": "string",
+                        "State": "string",
+                        "ZipCode": "string",
+                        "Country": "string",
+                        "Segment": "string",
+                        "LoyaltyTier": "string",
+                        "LoyaltyPoints": "integer",
+                        "StartDate": "timestamp",
+                        "EndDate": "timestamp",
+                        "IsCurrent": "integer"
+                    }
+                }
+            ],
+            "transformations": [
+                {
+                    "name": "ExistsCheckAgainstDim",
+                    "description": "Check if staging customer already exists in current DimCustomer using CustomerID as business key. Mirrors the SSIS Slowly Changing Dimension component's business key lookup.",
+                    "type": "Exists",
+                    "linkedTo": {
+                        "left": "StagingCustomers",
+                        "right": "CurrentDimCustomer"
+                    },
+                    "existsSettings": {
+                        "existsType": "exists",
+                        "conditions": [
+                            {
+                                "left": "StagingCustomers@CustomerID",
+                                "right": "CurrentDimCustomer@CustomerID"
+                            }
+                        ]
+                    },
+                    "outputs": {
+                        "matchStream": "ExistingCustomers",
+                        "noMatchStream": "NewCustomers"
+                    }
+                },
+                {
+                    "name": "LookupCurrentRecord",
+                    "description": "Join existing staging customers with their current dimension record to enable attribute comparison. Uses CustomerID as the join key.",
+                    "type": "Join",
+                    "linkedTo": {
+                        "left": "ExistingCustomers",
+                        "right": "CurrentDimCustomer"
+                    },
+                    "joinSettings": {
+                        "joinType": "inner",
+                        "conditions": [
+                            {
+                                "left": "ExistingCustomers@CustomerID",
+                                "right": "CurrentDimCustomer@CustomerID"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "ConditionalSplitChangedUnchanged",
+                    "description": "Split existing customers into Changed vs Unchanged streams by comparing SCD Type 2 tracked attributes: FullName, Email, Phone, Address, City, State, LoyaltyTier, Segment. Mirrors the WHERE clause in ProcessCustomerDimensionSCD2 Step 1.",
+                    "type": "ConditionalSplit",
+                    "linkedTo": "LookupCurrentRecord",
+                    "conditions": [
+                        {
+                            "name": "ChangedCustomers",
+                            "description": "Customer has at least one changed attribute (Type 2 change detected)",
+                            "expression": "ExistingCustomers@FullName != CurrentDimCustomer@FullName || ExistingCustomers@Email != CurrentDimCustomer@Email || ExistingCustomers@Phone != CurrentDimCustomer@Phone || ExistingCustomers@Address != CurrentDimCustomer@Address || ExistingCustomers@City != CurrentDimCustomer@City || ExistingCustomers@State != CurrentDimCustomer@State || ExistingCustomers@LoyaltyTier != CurrentDimCustomer@LoyaltyTier || ExistingCustomers@Segment != CurrentDimCustomer@Segment"
+                        },
+                        {
+                            "name": "UnchangedCustomers",
+                            "description": "No attributes changed - no action needed",
+                            "expression": "Default"
+                        }
+                    ]
+                },
+                {
+                    "name": "DerivedExpireOldRecord",
+                    "description": "For changed customers: set EndDate to today and IsCurrent to 0 on the existing dimension record. This expires the old version. Mirrors ProcessCustomerDimensionSCD2 Step 1 UPDATE.",
+                    "type": "DerivedColumn",
+                    "linkedTo": "ChangedCustomers",
+                    "columns": [
+                        {
+                            "name": "EndDate",
+                            "expression": "currentTimestamp()"
+                        },
+                        {
+                            "name": "IsCurrent",
+                            "expression": "0"
+                        },
+                        {
+                            "name": "RecordModifiedDate",
+                            "expression": "currentTimestamp()"
+                        }
+                    ],
+                    "outputColumns": "CustomerKey, CustomerID, FullName, Email, Phone, Address, City, State, ZipCode, Country, Segment, LoyaltyTier, LoyaltyPoints, StartDate, EndDate, IsCurrent, RecordModifiedDate"
+                },
+                {
+                    "name": "AlterRowExpireExisting",
+                    "description": "Mark expired records for UPDATE in the DimCustomer sink. Uses CustomerKey as the key column for the update operation.",
+                    "type": "AlterRow",
+                    "linkedTo": "DerivedExpireOldRecord",
+                    "policies": [
+                        {
+                            "action": "update",
+                            "condition": "true()",
+                            "description": "All rows in this stream are existing records that need expiration (EndDate set, IsCurrent=0)"
+                        }
+                    ]
+                },
+                {
+                    "name": "DerivedNewVersionRecord",
+                    "description": "For changed customers and brand new customers: create a new current version with StartDate=today, EndDate=9999-12-31, IsCurrent=1. Mirrors ProcessCustomerDimensionSCD2 Steps 2 and 3 INSERT.",
+                    "type": "DerivedColumn",
+                    "linkedTo": "UnionNewAndChanged",
+                    "columns": [
+                        {
+                            "name": "StartDate",
+                            "expression": "currentTimestamp()"
+                        },
+                        {
+                            "name": "EndDate",
+                            "expression": "toTimestamp('9999-12-31', 'yyyy-MM-dd')"
+                        },
+                        {
+                            "name": "IsCurrent",
+                            "expression": "1"
+                        },
+                        {
+                            "name": "RecordCreatedDate",
+                            "expression": "currentTimestamp()"
+                        },
+                        {
+                            "name": "RecordModifiedDate",
+                            "expression": "currentTimestamp()"
+                        }
+                    ],
+                    "outputColumns": "CustomerID, FullName, Email, Phone, Address, City, State, ZipCode, Country, Segment, LoyaltyTier, LoyaltyPoints, StartDate, EndDate, IsCurrent, RecordCreatedDate, RecordModifiedDate"
+                },
+                {
+                    "name": "UnionNewAndChanged",
+                    "description": "Combine new customers (never existed in dim) with changed customers (need a new current version row) into a single insert stream.",
+                    "type": "Union",
+                    "linkedTo": [
+                        "NewCustomers",
+                        "ChangedCustomers"
+                    ],
+                    "unionSettings": {
+                        "byName": true,
+                        "description": "Union by column name; both streams share the same staging schema columns"
+                    }
+                },
+                {
+                    "name": "AlterRowInsertNew",
+                    "description": "Mark all new/changed version records for INSERT into DimCustomer.",
+                    "type": "AlterRow",
+                    "linkedTo": "DerivedNewVersionRecord",
+                    "policies": [
+                        {
+                            "action": "insert",
+                            "condition": "true()",
+                            "description": "All rows in this stream are new dimension records to be inserted"
+                        }
+                    ]
+                }
+            ],
+            "sinks": [
+                {
+                    "name": "SinkExpireRecords",
+                    "description": "Update sink: expires old dimension records by setting EndDate and IsCurrent=0. Keyed on CustomerKey (surrogate key).",
+                    "type": "Sink",
+                    "linkedTo": "AlterRowExpireExisting",
+                    "dataset": {
+                        "referenceName": "ds_AzureSql_DimCustomer",
+                        "type": "DatasetReference"
+                    },
+                    "sinkSettings": {
+                        "allowInsert": false,
+                        "allowUpdate": true,
+                        "allowDelete": false,
+                        "allowUpsert": false,
+                        "keyColumns": ["CustomerKey"],
+                        "writeBehavior": "update",
+                        "tableAction": "none",
+                        "description": "Updates existing rows to expire them. Maps to ProcessCustomerDimensionSCD2 Step 1."
+                    }
+                },
+                {
+                    "name": "SinkInsertNewVersions",
+                    "description": "Insert sink: inserts new current-version rows for both brand-new and changed customers. Maps to ProcessCustomerDimensionSCD2 Steps 2 and 3.",
+                    "type": "Sink",
+                    "linkedTo": "AlterRowInsertNew",
+                    "dataset": {
+                        "referenceName": "ds_AzureSql_DimCustomer",
+                        "type": "DatasetReference"
+                    },
+                    "sinkSettings": {
+                        "allowInsert": true,
+                        "allowUpdate": false,
+                        "allowDelete": false,
+                        "allowUpsert": false,
+                        "writeBehavior": "insert",
+                        "tableAction": "none",
+                        "description": "Inserts new current rows with StartDate=today, EndDate=9999-12-31, IsCurrent=1."
+                    }
+                }
+            ],
+            "scriptLines": [
+                "-- Data Flow Script (ADF Mapping Data Flow expression language)",
+                "-- Equivalent to: SSIS Transform_CustomerDim.dtsx + dw.ProcessCustomerDimensionSCD2",
+                "",
+                "source(output(",
+                "    CustomerID as integer,",
+                "    FullName as string,",
+                "    Email as string,",
+                "    Phone as string,",
+                "    Address as string,",
+                "    City as string,",
+                "    State as string,",
+                "    ZipCode as string,",
+                "    Country as string,",
+                "    Segment as string,",
+                "    LoyaltyTier as string,",
+                "    LoyaltyPoints as integer",
+                "  ),",
+                "  allowSchemaDrift: false,",
+                "  store: 'azureSql',",
+                "  query: 'SELECT CustomerID, FullName, Email, Phone, Address, City, State, ZipCode, Country, Segment, LoyaltyTier, LoyaltyPoints FROM staging.CRMCustomers'",
+                ") ~> StagingCustomers",
+                "",
+                "source(output(",
+                "    CustomerKey as integer,",
+                "    CustomerID as integer,",
+                "    FullName as string,",
+                "    Email as string,",
+                "    Phone as string,",
+                "    Address as string,",
+                "    City as string,",
+                "    State as string,",
+                "    ZipCode as string,",
+                "    Country as string,",
+                "    Segment as string,",
+                "    LoyaltyTier as string,",
+                "    LoyaltyPoints as integer,",
+                "    StartDate as timestamp,",
+                "    EndDate as timestamp,",
+                "    IsCurrent as integer",
+                "  ),",
+                "  allowSchemaDrift: false,",
+                "  store: 'azureSql',",
+                "  query: 'SELECT CustomerKey, CustomerID, FullName, Email, Phone, Address, City, State, ZipCode, Country, Segment, LoyaltyTier, LoyaltyPoints, StartDate, EndDate, IsCurrent FROM dw.DimCustomer WHERE IsCurrent = 1'",
+                ") ~> CurrentDimCustomer",
+                "",
+                "StagingCustomers, CurrentDimCustomer exists(",
+                "    StagingCustomers@CustomerID == CurrentDimCustomer@CustomerID,",
+                "    negate: false,",
+                "    broadcast: 'auto'",
+                ") ~> ExistsInDim",
+                "",
+                "StagingCustomers, CurrentDimCustomer exists(",
+                "    StagingCustomers@CustomerID == CurrentDimCustomer@CustomerID,",
+                "    negate: true,",
+                "    broadcast: 'auto'",
+                ") ~> NewCustomers",
+                "",
+                "ExistsInDim, CurrentDimCustomer join(",
+                "    ExistsInDim@CustomerID == CurrentDimCustomer@CustomerID,",
+                "    joinType: 'inner',",
+                "    broadcast: 'auto'",
+                ") ~> LookupCurrentRecord",
+                "",
+                "LookupCurrentRecord split(",
+                "    ExistsInDim@FullName != CurrentDimCustomer@FullName",
+                "    || ExistsInDim@Email != CurrentDimCustomer@Email",
+                "    || ExistsInDim@Phone != CurrentDimCustomer@Phone",
+                "    || ExistsInDim@Address != CurrentDimCustomer@Address",
+                "    || ExistsInDim@City != CurrentDimCustomer@City",
+                "    || ExistsInDim@State != CurrentDimCustomer@State",
+                "    || ExistsInDim@LoyaltyTier != CurrentDimCustomer@LoyaltyTier",
+                "    || ExistsInDim@Segment != CurrentDimCustomer@Segment,",
+                "    disjoint: false",
+                ") ~> ConditionalSplitChangedUnchanged@(ChangedCustomers, UnchangedCustomers)",
+                "",
+                "ConditionalSplitChangedUnchanged@ChangedCustomers derive(",
+                "    EndDate = currentTimestamp(),",
+                "    IsCurrent = 0,",
+                "    RecordModifiedDate = currentTimestamp()",
+                ") ~> DerivedExpireOldRecord",
+                "",
+                "DerivedExpireOldRecord alterRow(",
+                "    updateIf(true())",
+                ") ~> AlterRowExpireExisting",
+                "",
+                "NewCustomers, ConditionalSplitChangedUnchanged@ChangedCustomers union(byName: true) ~> UnionNewAndChanged",
+                "",
+                "UnionNewAndChanged derive(",
+                "    StartDate = currentTimestamp(),",
+                "    EndDate = toTimestamp('9999-12-31', 'yyyy-MM-dd'),",
+                "    IsCurrent = 1,",
+                "    RecordCreatedDate = currentTimestamp(),",
+                "    RecordModifiedDate = currentTimestamp()",
+                ") ~> DerivedNewVersionRecord",
+                "",
+                "DerivedNewVersionRecord alterRow(",
+                "    insertIf(true())",
+                ") ~> AlterRowInsertNew",
+                "",
+                "AlterRowExpireExisting sink(",
+                "    allowSchemaDrift: false,",
+                "    store: 'azureSql',",
+                "    tableName: 'dw.DimCustomer',",
+                "    allowInsert: false,",
+                "    allowUpdate: true,",
+                "    keys: ['CustomerKey']",
+                ") ~> SinkExpireRecords",
+                "",
+                "AlterRowInsertNew sink(",
+                "    allowSchemaDrift: false,",
+                "    store: 'azureSql',",
+                "    tableName: 'dw.DimCustomer',",
+                "    allowInsert: true,",
+                "    allowUpdate: false",
+                ") ~> SinkInsertNewVersions"
+            ]
+        },
+        "dataFlowDebugSettings": {
+            "sourceSettings": [
+                {
+                    "sourceName": "StagingCustomers",
+                    "rowLimit": 1000
+                },
+                {
+                    "sourceName": "CurrentDimCustomer",
+                    "rowLimit": 1000
+                }
+            ]
+        },
+        "migrationNotes": {
+            "sourceStoredProcedure": "dw.ProcessCustomerDimensionSCD2",
+            "sourceSSISPackage": "Transform_CustomerDim.dtsx",
+            "scdAttributes": {
+                "businessKey": "CustomerID",
+                "type2TrackedAttributes": [
+                    "FullName",
+                    "Email",
+                    "Phone",
+                    "Address",
+                    "City",
+                    "State",
+                    "LoyaltyTier",
+                    "Segment"
+                ],
+                "metadataColumns": {
+                    "surrogateKey": "CustomerKey",
+                    "startDate": "StartDate",
+                    "endDate": "EndDate",
+                    "currentFlag": "IsCurrent",
+                    "createdDate": "RecordCreatedDate",
+                    "modifiedDate": "RecordModifiedDate"
+                }
+            },
+            "mappingFromStoredProc": {
+                "Step1_ExpireChanged": "ExistsCheckAgainstDim -> LookupCurrentRecord -> ConditionalSplitChangedUnchanged(ChangedCustomers) -> DerivedExpireOldRecord -> AlterRowExpireExisting -> SinkExpireRecords",
+                "Step2_InsertNewVersions": "ConditionalSplitChangedUnchanged(ChangedCustomers) -> UnionNewAndChanged -> DerivedNewVersionRecord -> AlterRowInsertNew -> SinkInsertNewVersions",
+                "Step3_InsertNewCustomers": "ExistsCheckAgainstDim(NoMatch=NewCustomers) -> UnionNewAndChanged -> DerivedNewVersionRecord -> AlterRowInsertNew -> SinkInsertNewVersions"
+            }
+        }
+    }
+}
