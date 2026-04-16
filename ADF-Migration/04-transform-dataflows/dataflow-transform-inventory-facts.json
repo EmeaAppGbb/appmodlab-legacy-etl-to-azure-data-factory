@@ -1,0 +1,249 @@
+{
+    "name": "dataflow_transform_inventory_facts",
+    "type": "Microsoft.DataFactory/factories/dataflows",
+    "properties": {
+        "description": "Mapping Data Flow that transforms staging inventory snapshot data into FactInventory format with dimension surrogate key lookups and calculated metrics. Replaces the transform portion of Extract_Inventory.dtsx (Oracle ADO.NET Source -> Data Conversion -> OLE DB Destination to staging.InventoryLevels) and the implicit inventory fact load logic. Performs lookups against DimDate, DimStore, and DimProduct to resolve surrogate keys, calculates InventoryValue and DaysOfSupply, and writes to curated zone.",
+        "type": "MappingDataFlow",
+        "typeProperties": {
+            "sources": [
+                {
+                    "name": "StagingInventorySource",
+                    "description": "Reads inventory snapshot data from ADLS staging Parquet (originally extracted from Oracle INVENTORY.STOCK_LEVELS via Extract_Inventory.dtsx)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_inventory",
+                        "type": "DatasetReference"
+                    },
+                    "schemaMapping": {
+                        "StoreID": "string",
+                        "ProductID": "string",
+                        "QuantityOnHand": "integer",
+                        "QuantityOnOrder": "integer",
+                        "LastRestockDate": "timestamp",
+                        "ReorderPoint": "integer",
+                        "SnapshotDate": "date"
+                    }
+                },
+                {
+                    "name": "DimDateReference",
+                    "description": "Date dimension for DateKey lookup on SnapshotDate",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_dim_date",
+                        "type": "DatasetReference"
+                    }
+                },
+                {
+                    "name": "DimStoreReference",
+                    "description": "Store dimension for StoreKey lookup",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_dim_store",
+                        "type": "DatasetReference"
+                    }
+                },
+                {
+                    "name": "DimProductReference",
+                    "description": "Product dimension for ProductKey lookup and UnitCost for inventory valuation (IsCurrent=1)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_dim_product",
+                        "type": "DatasetReference"
+                    }
+                }
+            ],
+            "transformations": [
+                {
+                    "name": "LookupDateKey",
+                    "description": "Join to DimDate on SnapshotDate=Date to resolve DateKey surrogate key",
+                    "type": "Lookup",
+                    "typeProperties": {
+                        "lookupStream": "DimDateReference",
+                        "lookupColumns": [
+                            {
+                                "sourceColumn": "SnapshotDate",
+                                "lookupColumn": "Date",
+                                "outputColumn": "DateKey"
+                            }
+                        ],
+                        "multipleMatches": "firstMatch",
+                        "noMatch": "error",
+                        "broadcast": "auto"
+                    }
+                },
+                {
+                    "name": "LookupStoreKey",
+                    "description": "Join to DimStore on StoreID to resolve StoreKey surrogate key",
+                    "type": "Lookup",
+                    "typeProperties": {
+                        "lookupStream": "DimStoreReference",
+                        "lookupColumns": [
+                            {
+                                "sourceColumn": "StoreID",
+                                "lookupColumn": "StoreID",
+                                "outputColumn": "StoreKey"
+                            }
+                        ],
+                        "multipleMatches": "firstMatch",
+                        "noMatch": "error",
+                        "broadcast": "auto"
+                    }
+                },
+                {
+                    "name": "LookupProductKey",
+                    "description": "Join to DimProduct (IsCurrent=1) on ProductID to resolve ProductKey and retrieve UnitCost for inventory valuation",
+                    "type": "Lookup",
+                    "typeProperties": {
+                        "lookupStream": "DimProductReference",
+                        "lookupColumns": [
+                            {
+                                "sourceColumn": "ProductID",
+                                "lookupColumn": "ProductID",
+                                "outputColumn": "ProductKey"
+                            }
+                        ],
+                        "multipleMatches": "firstMatch",
+                        "noMatch": "error",
+                        "broadcast": "auto"
+                    }
+                },
+                {
+                    "name": "CalculateInventoryMetrics",
+                    "description": "Calculate InventoryValue (QuantityOnHand * UnitCost) and DaysOfSupply based on average daily usage. Also adds LoadDate audit column.",
+                    "type": "DerivedColumn",
+                    "typeProperties": {
+                        "columns": [
+                            {
+                                "name": "InventoryValue",
+                                "expression": "toDecimal(QuantityOnHand) * UnitCost",
+                                "description": "Inventory valuation at cost = quantity on hand * unit cost from product dimension"
+                            },
+                            {
+                                "name": "DaysOfSupply",
+                                "expression": "iif(QuantityOnHand > 0 && ReorderPoint > 0, toInteger(round(toDecimal(QuantityOnHand) / (toDecimal(ReorderPoint) / 30.0))), toInteger(0))",
+                                "description": "Estimated days of supply based on reorder point as proxy for monthly demand"
+                            },
+                            {
+                                "name": "LoadDate",
+                                "expression": "currentTimestamp()",
+                                "description": "ETL load timestamp"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "InventoryQualityCheck",
+                    "description": "Validate inventory data quality - ensure quantities are non-negative and all dimension keys resolved",
+                    "type": "ConditionalSplit",
+                    "typeProperties": {
+                        "splitConditions": [
+                            {
+                                "name": "ValidInventory",
+                                "expression": "QuantityOnHand >= 0 && QuantityOnOrder >= 0 && !isNull(DateKey) && !isNull(StoreKey) && !isNull(ProductKey)",
+                                "description": "Valid inventory records with resolved dimension keys"
+                            }
+                        ],
+                        "defaultCondition": "InvalidInventory"
+                    }
+                }
+            ],
+            "sinks": [
+                {
+                    "name": "CuratedFactInventorySink",
+                    "description": "Write validated inventory facts to ADLS curated zone as Parquet, partitioned by DateKey for efficient querying",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_curated_fact_inventory",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "partitionOption": "key",
+                        "partitionColumns": ["DateKey"],
+                        "fileFormat": "parquet",
+                        "compressionCodec": "snappy"
+                    },
+                    "linkedTransformation": "InventoryQualityCheck",
+                    "linkedCondition": "ValidInventory"
+                },
+                {
+                    "name": "InventoryErrorLogSink",
+                    "description": "Write invalid inventory records to error log zone for investigation",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_error_log",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "fileFormat": "parquet"
+                    },
+                    "linkedTransformation": "InventoryQualityCheck",
+                    "linkedCondition": "InvalidInventory"
+                }
+            ],
+            "scriptLines": [
+                "// Mapping Data Flow Script - Inventory Facts Transformation",
+                "// Migrated from: Extract_Inventory.dtsx staging load + implicit inventory fact transform",
+                "",
+                "source(output(",
+                "    StoreID as string, ProductID as string,",
+                "    QuantityOnHand as integer, QuantityOnOrder as integer,",
+                "    LastRestockDate as timestamp, ReorderPoint as integer,",
+                "    SnapshotDate as date",
+                "),",
+                "    allowSchemaDrift: false,",
+                "    validateSchema: true) ~> StagingInventorySource",
+                "",
+                "source(output(DateKey as integer, Date as date),",
+                "    allowSchemaDrift: false) ~> DimDateReference",
+                "",
+                "source(output(StoreKey as integer, StoreID as string),",
+                "    allowSchemaDrift: false) ~> DimStoreReference",
+                "",
+                "source(output(ProductKey as integer, ProductID as string, UnitCost as decimal(18,2)),",
+                "    allowSchemaDrift: false,",
+                "    filter: IsCurrent == 1) ~> DimProductReference",
+                "",
+                "StagingInventorySource, DimDateReference lookup(SnapshotDate == Date,",
+                "    multiple: false,",
+                "    pickup: 'first',",
+                "    broadcast: 'auto') ~> LookupDateKey",
+                "",
+                "LookupDateKey, DimStoreReference lookup(StagingInventorySource@StoreID == DimStoreReference@StoreID,",
+                "    multiple: false,",
+                "    pickup: 'first',",
+                "    broadcast: 'auto') ~> LookupStoreKey",
+                "",
+                "LookupStoreKey, DimProductReference lookup(StagingInventorySource@ProductID == DimProductReference@ProductID,",
+                "    multiple: false,",
+                "    pickup: 'first',",
+                "    broadcast: 'auto') ~> LookupProductKey",
+                "",
+                "LookupProductKey derive(",
+                "    InventoryValue = toDecimal(QuantityOnHand) * UnitCost,",
+                "    DaysOfSupply = iif(QuantityOnHand > 0 && ReorderPoint > 0, toInteger(round(toDecimal(QuantityOnHand) / (toDecimal(ReorderPoint) / 30.0))), toInteger(0)),",
+                "    LoadDate = currentTimestamp()",
+                ") ~> CalculateInventoryMetrics",
+                "",
+                "CalculateInventoryMetrics split(",
+                "    QuantityOnHand >= 0 && QuantityOnOrder >= 0 && !isNull(DateKey) && !isNull(StoreKey) && !isNull(ProductKey),",
+                "    disjoint: false",
+                ") ~> InventoryQualityCheck@(ValidInventory, InvalidInventory)",
+                "",
+                "InventoryQualityCheck@ValidInventory sink(",
+                "    allowSchemaDrift: false,",
+                "    partitionBy('key', 'DateKey'),",
+                "    format: 'parquet',",
+                "    compression: 'snappy'",
+                ") ~> CuratedFactInventorySink",
+                "",
+                "InventoryQualityCheck@InvalidInventory sink(",
+                "    allowSchemaDrift: true,",
+                "    format: 'parquet'",
+                ") ~> InventoryErrorLogSink"
+            ]
+        },
+        "annotations": [
+            "SSIS-Migration",
+            "Transform",
+            "InventoryFacts",
+            "Step4"
+        ],
+        "folder": {
+            "name": "04-Transform"
+        }
+    }
+}

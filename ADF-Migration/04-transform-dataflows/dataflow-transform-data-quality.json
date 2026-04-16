@@ -1,0 +1,418 @@
+{
+    "name": "dataflow_transform_data_quality",
+    "type": "Microsoft.DataFactory/factories/dataflows",
+    "properties": {
+        "description": "Data quality validation and cleansing Mapping Data Flow. Replaces Transform_DataQuality.dtsx which contained a C# Script Task (anti-pattern: hard-coded rules, no unit testing), the dq.StandardizeAddresses stored procedure, and the dq.DeduplicateCustomers stored procedure. Implements all five DQ rule categories as declarative data flow transformations with assertions and conditional splits.",
+        "type": "MappingDataFlow",
+        "typeProperties": {
+            "sources": [
+                {
+                    "name": "StagingCustomerSource",
+                    "description": "Customer staging data for quality validation (replaces Script Task reading from staging.CRMCustomers)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_crm_customers",
+                        "type": "DatasetReference"
+                    },
+                    "schemaMapping": {
+                        "CustomerID": "string",
+                        "FullName": "string",
+                        "Email": "string",
+                        "Phone": "string",
+                        "Address": "string",
+                        "City": "string",
+                        "State": "string",
+                        "ZipCode": "string",
+                        "Country": "string",
+                        "Segment": "string",
+                        "LoyaltyTier": "string",
+                        "LoyaltyPoints": "integer",
+                        "StartDate": "timestamp",
+                        "EndDate": "timestamp",
+                        "LastModifiedDate": "timestamp"
+                    }
+                },
+                {
+                    "name": "StagingSalesSource",
+                    "description": "Sales staging data for quality validation",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_pos_sales",
+                        "type": "DatasetReference"
+                    },
+                    "schemaMapping": {
+                        "TransactionID": "string",
+                        "StoreID": "string",
+                        "ProductID": "string",
+                        "CustomerID": "string",
+                        "TransactionDate": "timestamp",
+                        "Quantity": "integer",
+                        "UnitPrice": "decimal(18,2)",
+                        "Discount": "decimal(5,2)",
+                        "TotalAmount": "decimal(18,2)"
+                    }
+                }
+            ],
+            "transformations": [
+                {
+                    "name": "AssertCustomerRules",
+                    "description": "Assert data quality rules on customer records (replaces C# Script Task Rules 1-4). Assertions log failures without stopping the flow.",
+                    "type": "Assert",
+                    "typeProperties": {
+                        "assertions": [
+                            {
+                                "id": "DQ_RULE_001",
+                                "name": "ValidEmailFormat",
+                                "expression": "isNull(Email) || regexMatch(Email, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}$')",
+                                "description": "Rule 1: Email format validation - must match standard email pattern (replaces C# Regex check in Script Task)"
+                            },
+                            {
+                                "id": "DQ_RULE_002",
+                                "name": "ValidPhoneFormat",
+                                "expression": "isNull(Phone) || length(regexReplace(Phone, '[^0-9]', '')) >= 10",
+                                "description": "Rule 2: Phone number validation - must have at least 10 digits after stripping formatting (replaces C# phone standardization in Script Task)"
+                            },
+                            {
+                                "id": "DQ_RULE_003",
+                                "name": "RequiredFieldsPresent",
+                                "expression": "!isNull(CustomerID) && !isNull(FullName) && length(trim(FullName)) > 0",
+                                "description": "Rule 3: Null handling - CustomerID and FullName are mandatory (replaces C# null checks in Script Task)"
+                            },
+                            {
+                                "id": "DQ_RULE_004",
+                                "name": "ValidDateRange",
+                                "expression": "isNull(EndDate) || isNull(StartDate) || EndDate > StartDate",
+                                "description": "Rule 4: Cross-field validation - EndDate must be after StartDate if both present (replaces C# cross-field validation in Script Task)"
+                            }
+                        ],
+                        "abortOnError": false
+                    }
+                },
+                {
+                    "name": "StandardizePhoneNumbers",
+                    "description": "Standardize phone numbers to consistent format by stripping non-numeric characters and formatting as (XXX) XXX-XXXX (replaces part of dq.StandardizeAddresses stored procedure and C# Script Task Rule 2 phone standardization)",
+                    "type": "DerivedColumn",
+                    "typeProperties": {
+                        "columns": [
+                            {
+                                "name": "Phone",
+                                "expression": "iif(isNull(Phone), Phone, concat('(', substring(regexReplace(Phone, '[^0-9]', ''), 1, 3), ') ', substring(regexReplace(Phone, '[^0-9]', ''), 4, 3), '-', substring(regexReplace(Phone, '[^0-9]', ''), 7, 4)))",
+                                "description": "Reformat phone to (XXX) XXX-XXXX"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "StandardizeAddresses",
+                    "description": "Trim whitespace and standardize casing for address fields (replaces dq.StandardizeAddresses stored procedure)",
+                    "type": "DerivedColumn",
+                    "typeProperties": {
+                        "columns": [
+                            {
+                                "name": "Address",
+                                "expression": "trim(initCap(Address))",
+                                "description": "Title case and trim address"
+                            },
+                            {
+                                "name": "City",
+                                "expression": "trim(initCap(City))",
+                                "description": "Title case and trim city"
+                            },
+                            {
+                                "name": "State",
+                                "expression": "trim(upper(State))",
+                                "description": "Uppercase and trim state"
+                            },
+                            {
+                                "name": "ZipCode",
+                                "expression": "trim(ZipCode)",
+                                "description": "Trim zip code"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "CustomerQualitySplit",
+                    "description": "Route customer records based on quality assessment (replaces the Script Task's marking of invalid records in staging tables)",
+                    "type": "ConditionalSplit",
+                    "typeProperties": {
+                        "splitConditions": [
+                            {
+                                "name": "ValidCustomers",
+                                "expression": "!isNull(CustomerID) && !isNull(FullName) && length(trim(FullName)) > 0 && (isNull(Email) || regexMatch(Email, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}$')) && (isNull(EndDate) || isNull(StartDate) || EndDate > StartDate)",
+                                "description": "Records passing all quality rules"
+                            },
+                            {
+                                "name": "QuarantinedCustomers",
+                                "expression": "isNull(CustomerID) || isNull(FullName) || length(trim(FullName)) == 0",
+                                "description": "Records missing required fields - quarantine for review"
+                            }
+                        ],
+                        "defaultCondition": "WarningCustomers"
+                    }
+                },
+                {
+                    "name": "DeduplicateCustomers",
+                    "description": "Remove duplicate customer records keeping the most recently modified version (replaces dq.DeduplicateCustomers stored procedure)",
+                    "type": "Aggregate",
+                    "typeProperties": {
+                        "groupByColumns": ["CustomerID"],
+                        "aggregateColumns": [
+                            {
+                                "name": "FullName",
+                                "expression": "last(FullName, LastModifiedDate)"
+                            },
+                            {
+                                "name": "Email",
+                                "expression": "last(Email, LastModifiedDate)"
+                            },
+                            {
+                                "name": "Phone",
+                                "expression": "last(Phone, LastModifiedDate)"
+                            },
+                            {
+                                "name": "Address",
+                                "expression": "last(Address, LastModifiedDate)"
+                            },
+                            {
+                                "name": "City",
+                                "expression": "last(City, LastModifiedDate)"
+                            },
+                            {
+                                "name": "State",
+                                "expression": "last(State, LastModifiedDate)"
+                            },
+                            {
+                                "name": "ZipCode",
+                                "expression": "last(ZipCode, LastModifiedDate)"
+                            },
+                            {
+                                "name": "Country",
+                                "expression": "last(Country, LastModifiedDate)"
+                            },
+                            {
+                                "name": "Segment",
+                                "expression": "last(Segment, LastModifiedDate)"
+                            },
+                            {
+                                "name": "LoyaltyTier",
+                                "expression": "last(LoyaltyTier, LastModifiedDate)"
+                            },
+                            {
+                                "name": "LoyaltyPoints",
+                                "expression": "last(LoyaltyPoints, LastModifiedDate)"
+                            },
+                            {
+                                "name": "LastModifiedDate",
+                                "expression": "max(LastModifiedDate)"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "AssertSalesRules",
+                    "description": "Assert data quality rules on sales records (replaces C# Script Task Rule 5 referential integrity checks)",
+                    "type": "Assert",
+                    "typeProperties": {
+                        "assertions": [
+                            {
+                                "id": "DQ_RULE_005",
+                                "name": "ValidTransactionID",
+                                "expression": "!isNull(TransactionID) && length(trim(TransactionID)) > 0",
+                                "description": "TransactionID must not be null or empty"
+                            },
+                            {
+                                "id": "DQ_RULE_006",
+                                "name": "PositiveQuantity",
+                                "expression": "Quantity > 0",
+                                "description": "Quantity must be positive"
+                            },
+                            {
+                                "id": "DQ_RULE_007",
+                                "name": "PositiveUnitPrice",
+                                "expression": "UnitPrice > 0",
+                                "description": "UnitPrice must be positive"
+                            },
+                            {
+                                "id": "DQ_RULE_008",
+                                "name": "ValidDiscount",
+                                "expression": "isNull(Discount) || (Discount >= 0 && Discount <= 100)",
+                                "description": "Discount percentage must be between 0 and 100"
+                            },
+                            {
+                                "id": "DQ_RULE_009",
+                                "name": "ValidTransactionDate",
+                                "expression": "!isNull(TransactionDate) && TransactionDate <= currentTimestamp()",
+                                "description": "TransactionDate must not be null or in the future"
+                            }
+                        ],
+                        "abortOnError": false
+                    }
+                },
+                {
+                    "name": "SalesQualitySplit",
+                    "description": "Route sales records based on quality assessment",
+                    "type": "ConditionalSplit",
+                    "typeProperties": {
+                        "splitConditions": [
+                            {
+                                "name": "ValidSales",
+                                "expression": "!isNull(TransactionID) && Quantity > 0 && UnitPrice > 0 && (isNull(Discount) || (Discount >= 0 && Discount <= 100)) && !isNull(TransactionDate) && TransactionDate <= currentTimestamp()",
+                                "description": "Records passing all sales quality rules"
+                            }
+                        ],
+                        "defaultCondition": "RejectedSales"
+                    }
+                }
+            ],
+            "sinks": [
+                {
+                    "name": "ValidCustomerSink",
+                    "description": "Write validated and cleansed customer records to ADLS staging-clean zone",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_staging_clean_customers",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "fileFormat": "parquet",
+                        "compressionCodec": "snappy"
+                    }
+                },
+                {
+                    "name": "QuarantinedCustomerSink",
+                    "description": "Write quarantined customer records for manual review (replaces Script Task's marking of invalid records in staging)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_quarantine_customers",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "fileFormat": "parquet"
+                    }
+                },
+                {
+                    "name": "ValidSalesSink",
+                    "description": "Write validated sales records to ADLS staging-clean zone",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_staging_clean_sales",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "fileFormat": "parquet",
+                        "compressionCodec": "snappy"
+                    }
+                },
+                {
+                    "name": "RejectedSalesSink",
+                    "description": "Write rejected sales records to quarantine zone",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_quarantine_sales",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "fileFormat": "parquet"
+                    }
+                },
+                {
+                    "name": "DQAuditLogSink",
+                    "description": "Write data quality audit log entries for monitoring and reporting (replaces Script Task's logging to audit table)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_dq_audit_log",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "fileFormat": "parquet"
+                    }
+                }
+            ],
+            "scriptLines": [
+                "// Mapping Data Flow Script - Data Quality Rules",
+                "// Migrated from: Transform_DataQuality.dtsx (C# Script Task + dq.StandardizeAddresses + dq.DeduplicateCustomers)",
+                "",
+                "// --- Customer Quality Branch ---",
+                "source(output(",
+                "    CustomerID as string, FullName as string, Email as string,",
+                "    Phone as string, Address as string, City as string,",
+                "    State as string, ZipCode as string, Country as string,",
+                "    Segment as string, LoyaltyTier as string, LoyaltyPoints as integer,",
+                "    StartDate as timestamp, EndDate as timestamp, LastModifiedDate as timestamp",
+                "),",
+                "    allowSchemaDrift: false) ~> StagingCustomerSource",
+                "",
+                "StagingCustomerSource assert(",
+                "    expectTrue(isNull(Email) || regexMatch(Email, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}$'), false, 'DQ_RULE_001', null, 'Invalid email format'),",
+                "    expectTrue(isNull(Phone) || length(regexReplace(Phone, '[^0-9]', '')) >= 10, false, 'DQ_RULE_002', null, 'Invalid phone format'),",
+                "    expectTrue(!isNull(CustomerID) && !isNull(FullName) && length(trim(FullName)) > 0, false, 'DQ_RULE_003', null, 'Missing required fields'),",
+                "    expectTrue(isNull(EndDate) || isNull(StartDate) || EndDate > StartDate, false, 'DQ_RULE_004', null, 'Invalid date range')",
+                ") ~> AssertCustomerRules",
+                "",
+                "AssertCustomerRules derive(",
+                "    Phone = iif(isNull(Phone), Phone, concat('(', substring(regexReplace(Phone, '[^0-9]', ''), 1, 3), ') ', substring(regexReplace(Phone, '[^0-9]', ''), 4, 3), '-', substring(regexReplace(Phone, '[^0-9]', ''), 7, 4)))",
+                ") ~> StandardizePhoneNumbers",
+                "",
+                "StandardizePhoneNumbers derive(",
+                "    Address = trim(initCap(Address)),",
+                "    City = trim(initCap(City)),",
+                "    State = trim(upper(State)),",
+                "    ZipCode = trim(ZipCode)",
+                ") ~> StandardizeAddresses",
+                "",
+                "StandardizeAddresses split(",
+                "    !isNull(CustomerID) && !isNull(FullName) && length(trim(FullName)) > 0,",
+                "    isNull(CustomerID) || isNull(FullName) || length(trim(FullName)) == 0,",
+                "    disjoint: false",
+                ") ~> CustomerQualitySplit@(ValidCustomers, QuarantinedCustomers, WarningCustomers)",
+                "",
+                "CustomerQualitySplit@ValidCustomers aggregate(",
+                "    groupBy(CustomerID),",
+                "    FullName = last(FullName, LastModifiedDate),",
+                "    Email = last(Email, LastModifiedDate),",
+                "    Phone = last(Phone, LastModifiedDate),",
+                "    Address = last(Address, LastModifiedDate),",
+                "    City = last(City, LastModifiedDate),",
+                "    State = last(State, LastModifiedDate),",
+                "    ZipCode = last(ZipCode, LastModifiedDate),",
+                "    Country = last(Country, LastModifiedDate),",
+                "    Segment = last(Segment, LastModifiedDate),",
+                "    LoyaltyTier = last(LoyaltyTier, LastModifiedDate),",
+                "    LoyaltyPoints = last(LoyaltyPoints, LastModifiedDate),",
+                "    LastModifiedDate = max(LastModifiedDate)",
+                ") ~> DeduplicateCustomers",
+                "",
+                "DeduplicateCustomers sink(format: 'parquet', compression: 'snappy') ~> ValidCustomerSink",
+                "CustomerQualitySplit@QuarantinedCustomers sink(format: 'parquet') ~> QuarantinedCustomerSink",
+                "",
+                "// --- Sales Quality Branch ---",
+                "source(output(",
+                "    TransactionID as string, StoreID as string, ProductID as string,",
+                "    CustomerID as string, TransactionDate as timestamp,",
+                "    Quantity as integer, UnitPrice as decimal(18,2),",
+                "    Discount as decimal(5,2), TotalAmount as decimal(18,2)",
+                "),",
+                "    allowSchemaDrift: false) ~> StagingSalesSource",
+                "",
+                "StagingSalesSource assert(",
+                "    expectTrue(!isNull(TransactionID), false, 'DQ_RULE_005', null, 'Missing TransactionID'),",
+                "    expectTrue(Quantity > 0, false, 'DQ_RULE_006', null, 'Non-positive quantity'),",
+                "    expectTrue(UnitPrice > 0, false, 'DQ_RULE_007', null, 'Non-positive unit price'),",
+                "    expectTrue(isNull(Discount) || (Discount >= 0 && Discount <= 100), false, 'DQ_RULE_008', null, 'Invalid discount'),",
+                "    expectTrue(!isNull(TransactionDate) && TransactionDate <= currentTimestamp(), false, 'DQ_RULE_009', null, 'Invalid transaction date')",
+                ") ~> AssertSalesRules",
+                "",
+                "AssertSalesRules split(",
+                "    !isNull(TransactionID) && Quantity > 0 && UnitPrice > 0,",
+                "    disjoint: false",
+                ") ~> SalesQualitySplit@(ValidSales, RejectedSales)",
+                "",
+                "SalesQualitySplit@ValidSales sink(format: 'parquet', compression: 'snappy') ~> ValidSalesSink",
+                "SalesQualitySplit@RejectedSales sink(format: 'parquet') ~> RejectedSalesSink"
+            ]
+        },
+        "annotations": [
+            "SSIS-Migration",
+            "Transform",
+            "DataQuality",
+            "Step4"
+        ],
+        "folder": {
+            "name": "04-Transform"
+        }
+    }
+}

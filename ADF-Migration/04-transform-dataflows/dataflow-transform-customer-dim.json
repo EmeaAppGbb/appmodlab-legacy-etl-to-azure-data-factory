@@ -1,0 +1,325 @@
+{
+    "name": "dataflow_transform_customer_dim",
+    "type": "Microsoft.DataFactory/factories/dataflows",
+    "properties": {
+        "description": "SCD Type 2 Mapping Data Flow for Customer dimension processing. Replaces Transform_CustomerDim.dtsx (SSIS Slowly Changing Dimension component with OLE DB Command for expire/insert) and the dw.ProcessCustomerDimensionSCD2 stored procedure. Implements three SCD2 operations: (1) expire changed rows by setting EndDate and IsCurrent=0, (2) insert new versions of changed records, (3) insert brand-new customers.",
+        "type": "MappingDataFlow",
+        "typeProperties": {
+            "sources": [
+                {
+                    "name": "StagingCustomerSource",
+                    "description": "Reads incoming CRM customer data from ADLS staging Parquet (replaces OLEDB Source querying staging.CRMCustomers)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_crm_customers",
+                        "type": "DatasetReference"
+                    },
+                    "schemaMapping": {
+                        "CustomerID": "string",
+                        "FullName": "string",
+                        "Email": "string",
+                        "Phone": "string",
+                        "Address": "string",
+                        "City": "string",
+                        "State": "string",
+                        "ZipCode": "string",
+                        "Country": "string",
+                        "Segment": "string",
+                        "LoyaltyTier": "string",
+                        "LoyaltyPoints": "integer",
+                        "LastModifiedDate": "timestamp"
+                    }
+                },
+                {
+                    "name": "ExistingCustomerDimension",
+                    "description": "Current customer dimension records (IsCurrent=1) for change detection (replaces SSIS SCD component's dimension table reference)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_dim_customer",
+                        "type": "DatasetReference"
+                    }
+                }
+            ],
+            "transformations": [
+                {
+                    "name": "FilterCurrentDimRecords",
+                    "description": "Filter dimension source to only current records (IsCurrent=1) for change comparison",
+                    "type": "Filter",
+                    "typeProperties": {
+                        "expression": "IsCurrent == 1"
+                    }
+                },
+                {
+                    "name": "JoinStagingToDimension",
+                    "description": "Full outer join staging to existing dimension on business key CustomerID to detect new, changed, and unchanged records (replaces SSIS SCD component's business key matching)",
+                    "type": "Join",
+                    "typeProperties": {
+                        "joinType": "fullOuter",
+                        "joinConditions": [
+                            {
+                                "leftColumn": "CustomerID",
+                                "rightColumn": "CustomerID"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "DetectChanges",
+                    "description": "Classify each row as New Customer, Changed (SCD Type 2 attributes modified), or Unchanged. Checks LoyaltyTier, Segment, Address, City, State, FullName, Email, Phone (replaces SSIS SCD FixedAttributes and ChangingAttributes config and the stored proc's multi-column comparison)",
+                    "type": "ConditionalSplit",
+                    "typeProperties": {
+                        "splitConditions": [
+                            {
+                                "name": "NewCustomer",
+                                "expression": "isNull(ExistingCustomerDimension@CustomerID)",
+                                "description": "Customer exists in staging but not in dimension - insert as new (Step 3 of stored proc)"
+                            },
+                            {
+                                "name": "ChangedCustomer",
+                                "expression": "!isNull(ExistingCustomerDimension@CustomerID) && (StagingCustomerSource@FullName != ExistingCustomerDimension@FullName || StagingCustomerSource@Email != ExistingCustomerDimension@Email || StagingCustomerSource@Phone != ExistingCustomerDimension@Phone || StagingCustomerSource@Address != ExistingCustomerDimension@Address || StagingCustomerSource@City != ExistingCustomerDimension@City || StagingCustomerSource@State != ExistingCustomerDimension@State || StagingCustomerSource@LoyaltyTier != ExistingCustomerDimension@LoyaltyTier || StagingCustomerSource@Segment != ExistingCustomerDimension@Segment)",
+                                "description": "Customer exists but SCD2 tracked attributes have changed - expire old row and insert new version (Steps 1+2 of stored proc)"
+                            }
+                        ],
+                        "defaultCondition": "UnchangedCustomer"
+                    }
+                },
+                {
+                    "name": "PrepareExpiredRows",
+                    "description": "For changed customers: prepare the existing dimension row to be expired by setting EndDate=currentTimestamp() and IsCurrent=0 (replaces Step 1 UPDATE in dw.ProcessCustomerDimensionSCD2 and the SSIS 'Update Changing Attributes' OLE DB Command)",
+                    "type": "DerivedColumn",
+                    "typeProperties": {
+                        "columns": [
+                            {
+                                "name": "EndDate",
+                                "expression": "currentTimestamp()"
+                            },
+                            {
+                                "name": "IsCurrent",
+                                "expression": "toInteger(0)"
+                            },
+                            {
+                                "name": "RecordModifiedDate",
+                                "expression": "currentTimestamp()"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "PrepareNewVersionRows",
+                    "description": "For changed customers: prepare a new dimension row with updated attributes, StartDate=currentTimestamp(), EndDate=null, IsCurrent=1 (replaces Step 2 INSERT in dw.ProcessCustomerDimensionSCD2 and SSIS 'Insert New Versions' destination)",
+                    "type": "DerivedColumn",
+                    "typeProperties": {
+                        "columns": [
+                            {
+                                "name": "StartDate",
+                                "expression": "currentTimestamp()"
+                            },
+                            {
+                                "name": "EndDate",
+                                "expression": "toTimestamp(null())"
+                            },
+                            {
+                                "name": "IsCurrent",
+                                "expression": "toInteger(1)"
+                            },
+                            {
+                                "name": "RecordCreatedDate",
+                                "expression": "currentTimestamp()"
+                            },
+                            {
+                                "name": "RecordModifiedDate",
+                                "expression": "currentTimestamp()"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "PrepareNewCustomerRows",
+                    "description": "For brand-new customers: prepare dimension row with StartDate=currentTimestamp(), EndDate=null, IsCurrent=1 (replaces Step 3 INSERT in dw.ProcessCustomerDimensionSCD2 and SSIS 'Insert New Customers' destination)",
+                    "type": "DerivedColumn",
+                    "typeProperties": {
+                        "columns": [
+                            {
+                                "name": "StartDate",
+                                "expression": "currentTimestamp()"
+                            },
+                            {
+                                "name": "EndDate",
+                                "expression": "toTimestamp(null())"
+                            },
+                            {
+                                "name": "IsCurrent",
+                                "expression": "toInteger(1)"
+                            },
+                            {
+                                "name": "RecordCreatedDate",
+                                "expression": "currentTimestamp()"
+                            },
+                            {
+                                "name": "RecordModifiedDate",
+                                "expression": "currentTimestamp()"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "AlterRowExpire",
+                    "description": "Mark expired rows for update operation in the sink (replaces the UPDATE ... SET EndDate, IsCurrent=0 in the stored proc)",
+                    "type": "AlterRow",
+                    "typeProperties": {
+                        "alterRowConditions": [
+                            {
+                                "condition": "true()",
+                                "action": "update"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "AlterRowInsertNewVersion",
+                    "description": "Mark new version rows for insert operation in the sink (replaces the INSERT of new version records in the stored proc)",
+                    "type": "AlterRow",
+                    "typeProperties": {
+                        "alterRowConditions": [
+                            {
+                                "condition": "true()",
+                                "action": "insert"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "AlterRowInsertNewCustomer",
+                    "description": "Mark new customer rows for insert operation in the sink (replaces the INSERT of brand-new customers in the stored proc)",
+                    "type": "AlterRow",
+                    "typeProperties": {
+                        "alterRowConditions": [
+                            {
+                                "condition": "true()",
+                                "action": "insert"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "UnionAllOutputs",
+                    "description": "Combine expired rows (update), new version rows (insert), and new customer rows (insert) into a single stream for the sink",
+                    "type": "Union",
+                    "typeProperties": {
+                        "byName": true
+                    }
+                }
+            ],
+            "sinks": [
+                {
+                    "name": "CustomerDimensionSink",
+                    "description": "Write upserted customer dimension records to ADLS curated zone as Parquet (replaces OLEDB Destinations to dw.DimCustomer table)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_curated_dim_customer",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "allowInsert": true,
+                        "allowUpdate": true,
+                        "allowUpsert": false,
+                        "allowDelete": false,
+                        "keyColumns": ["CustomerKey"],
+                        "fileFormat": "parquet",
+                        "compressionCodec": "snappy"
+                    }
+                }
+            ],
+            "scriptLines": [
+                "// Mapping Data Flow Script - Customer Dimension SCD Type 2",
+                "// Migrated from: Transform_CustomerDim.dtsx + dw.ProcessCustomerDimensionSCD2 stored procedure",
+                "",
+                "source(output(",
+                "    CustomerID as string, FullName as string, Email as string,",
+                "    Phone as string, Address as string, City as string,",
+                "    State as string, ZipCode as string, Country as string,",
+                "    Segment as string, LoyaltyTier as string, LoyaltyPoints as integer,",
+                "    LastModifiedDate as timestamp",
+                "),",
+                "    allowSchemaDrift: false) ~> StagingCustomerSource",
+                "",
+                "source(output(",
+                "    CustomerKey as integer, CustomerID as string, FullName as string,",
+                "    Email as string, Phone as string, Address as string, City as string,",
+                "    State as string, ZipCode as string, Country as string,",
+                "    Segment as string, LoyaltyTier as string, LoyaltyPoints as integer,",
+                "    StartDate as timestamp, EndDate as timestamp, IsCurrent as integer,",
+                "    RecordCreatedDate as timestamp, RecordModifiedDate as timestamp",
+                "),",
+                "    allowSchemaDrift: false) ~> ExistingCustomerDimension",
+                "",
+                "ExistingCustomerDimension filter(IsCurrent == 1) ~> FilterCurrentDimRecords",
+                "",
+                "StagingCustomerSource, FilterCurrentDimRecords join(",
+                "    StagingCustomerSource@CustomerID == FilterCurrentDimRecords@CustomerID,",
+                "    joinType: 'fullOuter',",
+                "    broadcast: 'auto'",
+                ") ~> JoinStagingToDimension",
+                "",
+                "JoinStagingToDimension split(",
+                "    isNull(FilterCurrentDimRecords@CustomerID),",
+                "    !isNull(FilterCurrentDimRecords@CustomerID) && (",
+                "        StagingCustomerSource@FullName != FilterCurrentDimRecords@FullName ||",
+                "        StagingCustomerSource@Email != FilterCurrentDimRecords@Email ||",
+                "        StagingCustomerSource@Phone != FilterCurrentDimRecords@Phone ||",
+                "        StagingCustomerSource@Address != FilterCurrentDimRecords@Address ||",
+                "        StagingCustomerSource@City != FilterCurrentDimRecords@City ||",
+                "        StagingCustomerSource@State != FilterCurrentDimRecords@State ||",
+                "        StagingCustomerSource@LoyaltyTier != FilterCurrentDimRecords@LoyaltyTier ||",
+                "        StagingCustomerSource@Segment != FilterCurrentDimRecords@Segment",
+                "    ),",
+                "    disjoint: false",
+                ") ~> DetectChanges@(NewCustomer, ChangedCustomer, UnchangedCustomer)",
+                "",
+                "DetectChanges@ChangedCustomer derive(",
+                "    EndDate = currentTimestamp(),",
+                "    IsCurrent = toInteger(0),",
+                "    RecordModifiedDate = currentTimestamp()",
+                ") ~> PrepareExpiredRows",
+                "",
+                "DetectChanges@ChangedCustomer derive(",
+                "    StartDate = currentTimestamp(),",
+                "    EndDate = toTimestamp(null()),",
+                "    IsCurrent = toInteger(1),",
+                "    RecordCreatedDate = currentTimestamp(),",
+                "    RecordModifiedDate = currentTimestamp()",
+                ") ~> PrepareNewVersionRows",
+                "",
+                "DetectChanges@NewCustomer derive(",
+                "    StartDate = currentTimestamp(),",
+                "    EndDate = toTimestamp(null()),",
+                "    IsCurrent = toInteger(1),",
+                "    RecordCreatedDate = currentTimestamp(),",
+                "    RecordModifiedDate = currentTimestamp()",
+                ") ~> PrepareNewCustomerRows",
+                "",
+                "PrepareExpiredRows alterRow(updateIf(true())) ~> AlterRowExpire",
+                "PrepareNewVersionRows alterRow(insertIf(true())) ~> AlterRowInsertNewVersion",
+                "PrepareNewCustomerRows alterRow(insertIf(true())) ~> AlterRowInsertNewCustomer",
+                "",
+                "AlterRowExpire, AlterRowInsertNewVersion, AlterRowInsertNewCustomer union(byName: true) ~> UnionAllOutputs",
+                "",
+                "UnionAllOutputs sink(",
+                "    allowSchemaDrift: false,",
+                "    allowInsert: true,",
+                "    allowUpdate: true,",
+                "    keys: ['CustomerKey'],",
+                "    format: 'parquet',",
+                "    compression: 'snappy'",
+                ") ~> CustomerDimensionSink"
+            ]
+        },
+        "annotations": [
+            "SSIS-Migration",
+            "Transform",
+            "CustomerDimension",
+            "SCD-Type2",
+            "Step4"
+        ],
+        "folder": {
+            "name": "04-Transform"
+        }
+    }
+}

@@ -1,0 +1,326 @@
+{
+    "name": "dataflow_transform_sales_facts",
+    "type": "Microsoft.DataFactory/factories/dataflows",
+    "properties": {
+        "description": "Mapping Data Flow that transforms staging sales data into FactSales format with dimension surrogate key lookups and calculated metrics. Replaces Transform_SalesFacts.dtsx (SSIS Data Flow with OLE DB Source -> Lookup Date/Store/Product/Customer -> Derived Column -> Conditional Split -> OLE DB Destination) and the dw.MergeFactSales stored procedure.",
+        "type": "MappingDataFlow",
+        "typeProperties": {
+            "sources": [
+                {
+                    "name": "StagingSalesSource",
+                    "description": "Reads incremental POS sales from ADLS staging Parquet (replaces OLEDB Source querying staging.POSSales with DATEADD filter)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_pos_sales",
+                        "type": "DatasetReference"
+                    },
+                    "schemaMapping": {
+                        "TransactionID": "string",
+                        "StoreID": "string",
+                        "ProductID": "string",
+                        "CustomerID": "string",
+                        "TransactionDate": "timestamp",
+                        "Quantity": "integer",
+                        "UnitPrice": "decimal(18,2)",
+                        "Discount": "decimal(5,2)",
+                        "TotalAmount": "decimal(18,2)"
+                    }
+                },
+                {
+                    "name": "DimDateReference",
+                    "description": "Date dimension reference data for DateKey lookup (replaces SSIS Lookup with full cache on dw.DimDate)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_dim_date",
+                        "type": "DatasetReference"
+                    }
+                },
+                {
+                    "name": "DimStoreReference",
+                    "description": "Store dimension reference data for StoreKey lookup (replaces SSIS Lookup on dw.DimStore)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_dim_store",
+                        "type": "DatasetReference"
+                    }
+                },
+                {
+                    "name": "DimProductReference",
+                    "description": "Product dimension reference data for ProductKey lookup, filtered to IsCurrent=1 (replaces SSIS Lookup on dw.DimProduct WHERE IsCurrent=1)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_dim_product",
+                        "type": "DatasetReference"
+                    }
+                },
+                {
+                    "name": "DimCustomerReference",
+                    "description": "Customer dimension reference data for CustomerKey lookup, filtered to IsCurrent=1 (replaces SSIS Lookup on dw.DimCustomer WHERE IsCurrent=1)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_dim_customer",
+                        "type": "DatasetReference"
+                    }
+                }
+            ],
+            "transformations": [
+                {
+                    "name": "LookupDateKey",
+                    "description": "Join to DimDate on TransactionDate=Date to resolve DateKey surrogate key (replaces SSIS 'Lookup Date Key' component with Full Cache mode)",
+                    "type": "Lookup",
+                    "linkedService": null,
+                    "typeProperties": {
+                        "lookupStream": "DimDateReference",
+                        "lookupColumns": [
+                            {
+                                "sourceColumn": "TransactionDate",
+                                "lookupColumn": "Date",
+                                "outputColumn": "DateKey"
+                            }
+                        ],
+                        "multipleMatches": "firstMatch",
+                        "noMatch": "error",
+                        "broadcast": "auto"
+                    }
+                },
+                {
+                    "name": "LookupStoreKey",
+                    "description": "Join to DimStore on StoreID to resolve StoreKey surrogate key (replaces SSIS 'Lookup Store Key' component)",
+                    "type": "Lookup",
+                    "typeProperties": {
+                        "lookupStream": "DimStoreReference",
+                        "lookupColumns": [
+                            {
+                                "sourceColumn": "StoreID",
+                                "lookupColumn": "StoreID",
+                                "outputColumn": "StoreKey"
+                            }
+                        ],
+                        "multipleMatches": "firstMatch",
+                        "noMatch": "error",
+                        "broadcast": "auto"
+                    }
+                },
+                {
+                    "name": "LookupProductKey",
+                    "description": "Join to DimProduct (IsCurrent=1) on ProductID to resolve ProductKey surrogate key (replaces SSIS 'Lookup Product Key' component)",
+                    "type": "Lookup",
+                    "typeProperties": {
+                        "lookupStream": "DimProductReference",
+                        "lookupColumns": [
+                            {
+                                "sourceColumn": "ProductID",
+                                "lookupColumn": "ProductID",
+                                "outputColumn": "ProductKey"
+                            }
+                        ],
+                        "multipleMatches": "firstMatch",
+                        "noMatch": "error",
+                        "broadcast": "auto"
+                    }
+                },
+                {
+                    "name": "LookupCustomerKey",
+                    "description": "Left join to DimCustomer (IsCurrent=1) on CustomerID to resolve CustomerKey surrogate key. Uses left outer to handle anonymous transactions (replaces SSIS 'Lookup Customer Key' component; original stored proc used LEFT JOIN)",
+                    "type": "Lookup",
+                    "typeProperties": {
+                        "lookupStream": "DimCustomerReference",
+                        "lookupColumns": [
+                            {
+                                "sourceColumn": "CustomerID",
+                                "lookupColumn": "CustomerID",
+                                "outputColumn": "CustomerKey"
+                            }
+                        ],
+                        "multipleMatches": "firstMatch",
+                        "noMatch": "ignore",
+                        "broadcast": "auto"
+                    }
+                },
+                {
+                    "name": "DerivedMetrics",
+                    "description": "Calculate Revenue, DiscountAmount, and GrossProfit business metrics (replaces SSIS 'Calculate Metrics' Derived Column component and the computed columns in dw.MergeFactSales stored procedure)",
+                    "type": "DerivedColumn",
+                    "typeProperties": {
+                        "columns": [
+                            {
+                                "name": "Revenue",
+                                "expression": "Quantity * UnitPrice",
+                                "description": "Gross revenue = Quantity * UnitPrice"
+                            },
+                            {
+                                "name": "DiscountAmount",
+                                "expression": "(Quantity * UnitPrice) * (Discount / 100.0)",
+                                "description": "Discount amount in currency"
+                            },
+                            {
+                                "name": "NetRevenue",
+                                "expression": "(Quantity * UnitPrice) - ((Quantity * UnitPrice) * (Discount / 100.0))",
+                                "description": "Revenue after discount"
+                            },
+                            {
+                                "name": "GrossProfit",
+                                "expression": "(Quantity * UnitPrice) - (ProductUnitCost * Quantity)",
+                                "description": "Revenue minus cost of goods sold (uses ProductUnitCost from DimProduct lookup)"
+                            },
+                            {
+                                "name": "LoadDate",
+                                "expression": "currentTimestamp()",
+                                "description": "ETL load timestamp"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "DataQualityFilter",
+                    "description": "Routes rows by data quality rules (replaces SSIS 'Data Quality Check' Conditional Split: valid rows where Quantity>0 AND UnitPrice>0 go to sink, invalid rows go to error log)",
+                    "type": "ConditionalSplit",
+                    "typeProperties": {
+                        "splitConditions": [
+                            {
+                                "name": "ValidSales",
+                                "expression": "Quantity > 0 && UnitPrice > 0 && !isNull(DateKey) && !isNull(StoreKey) && !isNull(ProductKey)",
+                                "description": "Valid sales records with all required dimension keys resolved"
+                            },
+                            {
+                                "name": "InvalidSales",
+                                "expression": "Quantity <= 0 || UnitPrice <= 0",
+                                "description": "Records with invalid quantity or price"
+                            }
+                        ],
+                        "defaultCondition": "UnmatchedDimensionKeys"
+                    }
+                },
+                {
+                    "name": "DeduplicateTransactions",
+                    "description": "Ensure no duplicate TransactionIDs are loaded (replaces NOT EXISTS check in dw.MergeFactSales stored procedure)",
+                    "type": "Exists",
+                    "typeProperties": {
+                        "existsStream": "ExistingFactSales",
+                        "existsColumns": [
+                            {
+                                "sourceColumn": "TransactionID",
+                                "existsColumn": "TransactionID"
+                            }
+                        ],
+                        "negate": true
+                    }
+                }
+            ],
+            "sinks": [
+                {
+                    "name": "CuratedFactSalesSink",
+                    "description": "Write validated and enriched sales facts to ADLS curated zone as Parquet (replaces OLEDB Destination to dw.FactSales table)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_curated_fact_sales",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "partitionOption": "key",
+                        "partitionColumns": ["DateKey"],
+                        "fileFormat": "parquet",
+                        "compressionCodec": "snappy"
+                    },
+                    "linkedTransformation": "DataQualityFilter",
+                    "linkedCondition": "ValidSales"
+                },
+                {
+                    "name": "ErrorLogSink",
+                    "description": "Write invalid/rejected rows to ADLS error log zone for investigation (replaces flat file destination C:\\ETLErrors\\InvalidSales_${ExecutionDate}.txt)",
+                    "dataset": {
+                        "referenceName": "ds_adls_parquet_error_log",
+                        "type": "DatasetReference"
+                    },
+                    "typeProperties": {
+                        "partitionOption": "roundRobin",
+                        "fileFormat": "parquet"
+                    },
+                    "linkedTransformation": "DataQualityFilter",
+                    "linkedCondition": "InvalidSales"
+                }
+            ],
+            "scriptLines": [
+                "// Mapping Data Flow Script - Sales Facts Transformation",
+                "// Migrated from: Transform_SalesFacts.dtsx + dw.MergeFactSales stored procedure",
+                "",
+                "source(output(",
+                "    TransactionID as string,",
+                "    StoreID as string,",
+                "    ProductID as string,",
+                "    CustomerID as string,",
+                "    TransactionDate as timestamp,",
+                "    Quantity as integer,",
+                "    UnitPrice as decimal(18,2),",
+                "    Discount as decimal(5,2),",
+                "    TotalAmount as decimal(18,2)",
+                "),",
+                "    allowSchemaDrift: false,",
+                "    validateSchema: true) ~> StagingSalesSource",
+                "",
+                "source(output(DateKey as integer, Date as date),",
+                "    allowSchemaDrift: false) ~> DimDateReference",
+                "",
+                "source(output(StoreKey as integer, StoreID as string),",
+                "    allowSchemaDrift: false) ~> DimStoreReference",
+                "",
+                "source(output(ProductKey as integer, ProductID as string, UnitCost as decimal(18,2)),",
+                "    allowSchemaDrift: false,",
+                "    filter: IsCurrent == 1) ~> DimProductReference",
+                "",
+                "source(output(CustomerKey as integer, CustomerID as string),",
+                "    allowSchemaDrift: false,",
+                "    filter: IsCurrent == 1) ~> DimCustomerReference",
+                "",
+                "StagingSalesSource, DimDateReference lookup(toDate(TransactionDate) == Date,",
+                "    multiple: false,",
+                "    pickup: 'first',",
+                "    broadcast: 'auto') ~> LookupDateKey",
+                "",
+                "LookupDateKey, DimStoreReference lookup(StagingSalesSource@StoreID == DimStoreReference@StoreID,",
+                "    multiple: false,",
+                "    pickup: 'first',",
+                "    broadcast: 'auto') ~> LookupStoreKey",
+                "",
+                "LookupStoreKey, DimProductReference lookup(StagingSalesSource@ProductID == DimProductReference@ProductID,",
+                "    multiple: false,",
+                "    pickup: 'first',",
+                "    broadcast: 'auto') ~> LookupProductKey",
+                "",
+                "LookupProductKey, DimCustomerReference lookup(StagingSalesSource@CustomerID == DimCustomerReference@CustomerID,",
+                "    multiple: false,",
+                "    pickup: 'first',",
+                "    broadcast: 'left') ~> LookupCustomerKey",
+                "",
+                "LookupCustomerKey derive(",
+                "    Revenue = Quantity * UnitPrice,",
+                "    DiscountAmount = (Quantity * UnitPrice) * (Discount / toDecimal(100.0)),",
+                "    NetRevenue = (Quantity * UnitPrice) - ((Quantity * UnitPrice) * (Discount / toDecimal(100.0))),",
+                "    GrossProfit = (Quantity * UnitPrice) - (UnitCost * Quantity),",
+                "    LoadDate = currentTimestamp()",
+                ") ~> DerivedMetrics",
+                "",
+                "DerivedMetrics split(",
+                "    Quantity > 0 && UnitPrice > 0 && !isNull(DateKey) && !isNull(StoreKey) && !isNull(ProductKey),",
+                "    Quantity <= 0 || UnitPrice <= 0,",
+                "    disjoint: false",
+                ") ~> DataQualityFilter@(ValidSales, InvalidSales, UnmatchedDimensionKeys)",
+                "",
+                "DataQualityFilter@ValidSales sink(",
+                "    allowSchemaDrift: false,",
+                "    partitionBy('key', 'DateKey'),",
+                "    format: 'parquet',",
+                "    compression: 'snappy'",
+                ") ~> CuratedFactSalesSink",
+                "",
+                "DataQualityFilter@InvalidSales sink(",
+                "    allowSchemaDrift: true,",
+                "    format: 'parquet'",
+                ") ~> ErrorLogSink"
+            ]
+        },
+        "annotations": [
+            "SSIS-Migration",
+            "Transform",
+            "SalesFacts",
+            "Step4"
+        ],
+        "folder": {
+            "name": "04-Transform"
+        }
+    }
+}

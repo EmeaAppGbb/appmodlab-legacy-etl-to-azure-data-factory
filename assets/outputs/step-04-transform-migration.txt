@@ -1,0 +1,109 @@
+ÔùÅ List directory ADF-Migration
+  Ôöö 3 files found
+
+ÔùÅ Search (glob)
+  Ôöé "BrightfieldETL/SSIS-Packages/Transform/**/*"
+  Ôöö 3 files found
+
+ÔùÅ Search (glob)
+  Ôöé "BrightfieldETL/SQL/StoredProcedures/**/*"
+  Ôöö 1 file found
+
+ÔùÅ Read Transform_SalesFacts.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Transform\Transform_SalesFacts.dtsx
+  Ôöö 150 lines read
+
+ÔùÅ Read Transform_DataQuality.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Transform\Transform_DataQuality.dtsx
+  Ôöö 64 lines read
+
+ÔùÅ Read Transform_CustomerDim.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Transform\Transform_CustomerDim.dtsx
+  Ôöö 105 lines read
+
+ÔùÅ Read 01_ETL_Stored_Procedures.sql
+  Ôöé BrightfieldETL\SQL\StoredProcedures\01_ETL_Stored_Procedures.sql
+  Ôöö 218 lines read
+
+Now I have full context of the source SSIS packages and stored procedures. Let me also check for any inventory-related sources and existing ADF patterns.
+
+ÔùÅ Search (glob)
+  Ôöé "ADF-Migration/03-extract-pipelines/*.json"
+  Ôöö No matches found
+
+ÔùÅ Search (grep)
+  Ôöé "inventory|Inventory" (BrightfieldETL)
+  Ôöö 7 files found
+
+ÔùÅ Read Extract_Inventory.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_Inventory.dtsx
+  Ôöö L1:50 (50 lines read)
+
+ÔùÅ Search (grep)
+  Ôöé "inventory|Inventory"
+  Ôöé (BrightfieldETL\SQL\DataWarehouse\01_Create_DataWarehouse_Schema.sql)
+  Ôöö 35 lines found
+
+ÔùÅ Search (glob)
+  Ôöé "ADF-Migration/**/*.json"
+  Ôöö 22 files found
+
+Let me check one existing ADF pipeline for style consistency, then create all files.
+
+ÔùÅ Read Extract_Inventory.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_Inventory.dtsx
+  Ôöö L50:100 (17 lines read)
+
+ÔùÅ Read pipeline-extract-pos-sales.json
+  Ôöé ADF-Migration\03-extract-pipelines\pipelines\pipeline-extract-pos-sales.json
+  Ôöö L1:40 (40 lines read)
+
+ÔùÅ Create output directories (shell)
+  Ôöé New-Item -ItemType Directory -Path "C:\code\gbb\labs\appmodlab-legacy-etl-to
+  Ôöé -azure-data-factory\ADF-Migration\04-transform-dataflows" -Force | Out-Null;
+  Ôöé New-Item -ItemType Directory -Path "C:\code\gbb\labs\appmodlab-legacy-etl-to
+  Ôöé -azure-data-factory\ADF-Migration\04-transform-dataflows\notebooks" -Force |
+  Ôöé Out-Null; Write-Output "Done"
+  Ôöö 2 lines...
+
+Now I'll create all 5 files in parallel:
+
+ÔùÅ Create dataflow-transform-customer-dim.json +326
+  Ôöö ADF-Migration\04-transform-dataflows\dataflow-transform-customer-dim.json
+
+ÔùÅ Create dataflow-transform-sales-facts.json +327
+  Ôöö ADF-Migration\04-transform-dataflows\dataflow-transform-sales-facts.json
+
+ÔùÅ Create dataflow-transform-data-quality.json +419
+  Ôöö ADF-Migration\04-transform-dataflows\dataflow-transform-data-quality.json
+
+ÔùÅ Create dataflow-transform-inventory-facts.json +250
+  Ôöö ADF-Migration\04-transform-dataflows\dataflow-transform-inventory-facts.json
+
+ÔùÅ Create complex-transformations.py +462
+  Ôöö ADF-Migration\04-transform-dataflows\notebooks\complex-transformations.py
+
+Let me validate the JSON files are well-formed and verify the directory structure:
+
+ÔùÅ Validate JSON and list files (shell)
+  Ôöé cd C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-factory;
+  Ôöé Get-ChildItem -Path ADF-Migration\04-transform-dataflows -Recurse |
+  Ôöé ForEach-Object { $_.FullName.Replace("C:\code\gbb\labs\appmodlab-legacy-et
+  Ôöé l-to-azure-data-factory\", "") + " (" + [math]::Round($_.Length/1024, 1) +
+  Ôöé " KB)" }; Write-Output "---"; Get-ChildItem ÔÇª
+  Ôöö 16 lines...
+
+All files created and validated. Here's what was delivered in `ADF-Migration/04-transform-dataflows/`:
+
+| File | Replaces | Key Transformations |
+|---|---|---|
+| **dataflow-transform-sales-facts.json** | `Transform_SalesFacts.dtsx` + `dw.MergeFactSales` | Source ÔåÆ Lookup(DimDate/Store/Product/Customer) ÔåÆ DerivedColumn(Revenue, DiscountAmount, GrossProfit) ÔåÆ ConditionalSplit(DataQuality) ÔåÆ Sink(curated) |
+| **dataflow-transform-customer-dim.json** | `Transform_CustomerDim.dtsx` + `dw.ProcessCustomerDimensionSCD2` | SCD Type 2 via Source ÔåÆ Join ÔåÆ ConditionalSplit(New/Changed/Unchanged) ÔåÆ DerivedColumn(expire/insert) ÔåÆ AlterRow ÔåÆ Union ÔåÆ Sink |
+| **dataflow-transform-data-quality.json** | `Transform_DataQuality.dtsx` (C# Script Task) + `dq.StandardizeAddresses` + `dq.DeduplicateCustomers` | Assert(email/phone/nulls/dates) ÔåÆ DerivedColumn(standardize) ÔåÆ ConditionalSplit(valid/quarantine) ÔåÆ Aggregate(dedupe) |
+| **dataflow-transform-inventory-facts.json** | `Extract_Inventory.dtsx` transform logic | Source ÔåÆ Lookup(DimDate/Store/Product) ÔåÆ DerivedColumn(InventoryValue, DaysOfSupply) ÔåÆ ConditionalSplit ÔåÆ Sink |
+| **notebooks/complex-transformations.py** | All stored procedures + cross-table validation | Delta Lake MERGE for SCD2, FactSales merge with Z-ORDER (replaces index drop/rebuild), cross-table referential integrity, batch audit management |
+
+
+Changes   +1784 -0
+Requests  3 Premium (5m 33s)
+Tokens    Ôåæ 376.8k ÔÇó Ôåô 25.5k ÔÇó 306.8k (cached)
