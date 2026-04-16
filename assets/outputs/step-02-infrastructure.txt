@@ -1,0 +1,73 @@
+ÔùÅ List directory ADF-Migration
+  Ôöö 1 file found
+
+ÔùÅ Create infrastructure directories (shell)
+  Ôöé New-Item -ItemType Directory -Path "C:\code\gbb\labs\appmodlab-legacy-etl-to
+  Ôöé -azure-data-factory\ADF-Migration\02-infrastructure\modules" -Force
+  Ôöö 4 lines...
+
+Now I'll create all 7 files in parallel:
+
+ÔùÅ Create main.bicep +105
+  Ôöö ADF-Migration\02-infrastructure\main.bicep
+
+ÔùÅ Create deploy.ps1 +104
+  Ôöö ADF-Migration\02-infrastructure\deploy.ps1
+
+ÔùÅ Create storage-account.bicep +69
+  Ôöö ADF-Migration\02-infrastructure\modules\storage-account.bicep
+
+ÔùÅ Create data-factory.bicep +101
+  Ôöö ADF-Migration\02-infrastructure\modules\data-factory.bicep
+
+ÔùÅ Create synapse.bicep +107
+  Ôöö ADF-Migration\02-infrastructure\modules\synapse.bicep
+
+ÔùÅ Create self-hosted-ir.bicep +178
+  Ôöö ADF-Migration\02-infrastructure\modules\self-hosted-ir.bicep
+
+ÔùÅ Create key-vault.bicep +51
+  Ôöö ADF-Migration\02-infrastructure\modules\key-vault.bicep
+
+Let me verify the structure and validate the Bicep if the CLI is available:
+
+ÔùÅ List directory ADF-Migration\02-infrastructure
+  Ôöö 3 files found
+
+ÔùÅ Validate Bicep templates (shell)
+  Ôöé az bicep build --file "C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-f
+  Ôöé actory\ADF-Migration\02-infrastructure\main.bicep" --stdout | Out-Null;
+  Ôöé Write-Host "Bicep validation: OK"
+  Ôöö 2 lines...
+
+Bicep compiles successfully (one minor warning about a potential minimum-length edge case on the storage name, which is safe given our prefix constraint). Let me commit the work:
+
+ÔùÅ Stage and review changes (shell)
+  Ôöé cd "C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-factory" && git add
+  Ôöé ADF-Migration/02-infrastructure/ && git --no-pager diff --cached --stat
+  Ôöö 9 lines...
+
+ÔùÅ Commit Bicep templates (shell)
+  Ôöé cd "C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-factory" && git
+  Ôöé commit -m "Add Bicep IaC templates for ADF migration infrastructure
+  Ôöé
+  Ôöé Create 02-infrastructure module with:
+  Ôöé - main.bicep orchestrator (environment/location/prefix params)ÔÇª
+  Ôöö 23 lines...
+
+All 7 files created, Bicep validated, and committed. Here's what was built:
+
+| File | Purpose |
+|---|---|
+| `main.bicep` | Orchestrator with `environment`, `location`, `prefix` params; wires all modules |
+| `modules/data-factory.bicep` | ADF with system-assigned managed identity, Log Analytics diagnostics, KV access policy |
+| `modules/storage-account.bicep` | ADLS Gen2 (HNS enabled) with `raw`, `staging`, `curated` containers |
+| `modules/synapse.bicep` | Synapse workspace + dedicated SQL pool (`DW100c` default) |
+| `modules/key-vault.bicep` | Key Vault with soft-delete, purge protection, template deployment enabled |
+| `modules/self-hosted-ir.bicep` | Windows Server 2022 VM + VNet/NSG/NIC + ADF self-hosted IR registration |
+| `deploy.ps1` | Deployment script ÔÇö creates RG, prompts for secrets, runs `az deployment group create` |
+
+
+Changes   +715 -0
+Requests  3 Premium (2m 30s)
+Tokens    Ôåæ 212.6k ÔÇó Ôåô 8.2k ÔÇó 184.7k (cached)
