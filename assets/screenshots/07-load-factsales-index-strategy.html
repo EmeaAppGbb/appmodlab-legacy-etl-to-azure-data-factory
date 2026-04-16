@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Load_FactSales.dtsx — Index Strategy &amp; Merge</title>
+<style>
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; padding: 32px; margin: 0; }
+  .window { background: #252526; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; max-width: 900px; margin: 0 auto; }
+  .titlebar { background: #3c3c3c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
+  .titlebar span { color: #aaa; font-size: 13px; margin-left: 12px; }
+  .content { padding: 20px 24px; font-size: 13px; line-height: 1.6; overflow-x: auto; }
+  .kw { color: #569cd6; } .str { color: #ce9178; } .fn { color: #dcdcaa; }
+  .comment { color: #6a9955; } .type { color: #4ec9b0; } .num { color: #b5cea8; }
+  h2 { color: #569cd6; margin: 0 0 12px 0; font-size: 15px; }
+  .section { color: #c586c0; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span>SSIS-Packages / Load / Load_FactSales.dtsx</span>
+  </div>
+  <div class="content">
+    <h2>📥 Load FactSales — Drop/Rebuild Index Strategy</h2>
+<pre>
+<span class="section">① Drop Indexes</span>  <span class="comment">— faster bulk insert without index maintenance</span>
+   <span class="kw">EXEC</span> <span class="fn">dw.DropFactSalesIndexes</span>
+   <span class="comment">-- Drops: IX_FactSales_DateKey, _StoreKey, _ProductKey, _CustomerKey</span>
+        │
+        ▼
+<span class="section">② Prepare Target</span>  <span class="comment">— incremental: no-op / full reload: TRUNCATE</span>
+        │
+        ▼
+<span class="section">③ Merge Sales Data</span>
+   <span class="kw">EXEC</span> <span class="fn">dw.MergeFactSales</span>
+
+   <span class="kw">INSERT INTO</span> <span class="type">dw.FactSales</span> (...)
+   <span class="kw">SELECT</span>
+       d.DateKey, st.StoreKey, p.ProductKey, c.CustomerKey,
+       s.TransactionID, s.Quantity, s.UnitPrice,
+       s.Discount,
+       (s.Quantity * s.UnitPrice) * (s.Discount / <span class="num">100.0</span>) <span class="kw">AS</span> <span class="col">DiscountAmount</span>,
+       s.Quantity * s.UnitPrice                          <span class="kw">AS</span> <span class="col">Revenue</span>,
+       p.UnitCost * s.Quantity                           <span class="kw">AS</span> <span class="col">Cost</span>,
+       (Revenue) - (Cost)                                <span class="kw">AS</span> <span class="col">GrossProfit</span>,
+       s.TotalAmount                                     <span class="kw">AS</span> <span class="col">NetRevenue</span>
+   <span class="kw">FROM</span> <span class="type">staging.POSSales</span> s
+   <span class="kw">JOIN</span> <span class="type">dw.DimDate</span>     d  <span class="kw">ON</span> <span class="fn">CAST</span>(s.TransactionDate <span class="kw">AS DATE</span>) = d.Date
+   <span class="kw">JOIN</span> <span class="type">dw.DimStore</span>    st <span class="kw">ON</span> s.StoreID = st.StoreID
+   <span class="kw">JOIN</span> <span class="type">dw.DimProduct</span>  p  <span class="kw">ON</span> s.ProductID = p.ProductID <span class="kw">AND</span> p.IsCurrent = <span class="num">1</span>
+   <span class="kw">LEFT JOIN</span> <span class="type">dw.DimCustomer</span> c <span class="kw">ON</span> s.CustomerID = c.CustomerID <span class="kw">AND</span> c.IsCurrent = <span class="num">1</span>
+   <span class="kw">WHERE NOT EXISTS</span> (<span class="kw">SELECT</span> <span class="num">1</span> <span class="kw">FROM</span> <span class="type">dw.FactSales</span> f
+                     <span class="kw">WHERE</span> f.TransactionID = s.TransactionID)
+     <span class="kw">AND</span> s.Quantity &gt; <span class="num">0</span> <span class="kw">AND</span> s.UnitPrice &gt; <span class="num">0</span>;
+        │
+        ▼
+<span class="section">④ Rebuild Indexes</span>
+   <span class="kw">EXEC</span> <span class="fn">dw.RebuildFactSalesIndexes</span>
+   <span class="comment">-- Recreates all 5 indexes on FactSales</span>
+        │
+        ▼
+<span class="section">⑤ Update Statistics</span>
+   <span class="kw">UPDATE STATISTICS</span> <span class="type">dw.FactSales</span>
+</pre>
+  </div>
+</div>
+</body>
+</html>

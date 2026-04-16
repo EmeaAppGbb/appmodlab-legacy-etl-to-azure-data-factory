@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SCD Type 2 — Customer Dimension Processing</title>
+<style>
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; padding: 32px; margin: 0; }
+  .window { background: #252526; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; max-width: 900px; margin: 0 auto; }
+  .titlebar { background: #3c3c3c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
+  .titlebar span { color: #aaa; font-size: 13px; margin-left: 12px; }
+  .content { padding: 20px 24px; font-size: 13px; line-height: 1.6; overflow-x: auto; }
+  .kw { color: #569cd6; } .str { color: #ce9178; } .fn { color: #dcdcaa; }
+  .comment { color: #6a9955; } .type { color: #4ec9b0; } .num { color: #b5cea8; }
+  h2 { color: #569cd6; margin: 0 0 12px 0; font-size: 15px; }
+  .section { color: #c586c0; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span>SQL / StoredProcedures / ProcessCustomerDimensionSCD2</span>
+  </div>
+  <div class="content">
+    <h2>🔄 SCD Type 2 — Slowly Changing Customer Dimension</h2>
+<pre>
+<span class="kw">CREATE PROCEDURE</span> <span class="fn">dw.ProcessCustomerDimensionSCD2</span>
+<span class="kw">AS BEGIN</span>
+    <span class="kw">SET NOCOUNT ON</span>;
+
+    <span class="section">-- Step 1: Expire changed records</span>
+    <span class="kw">UPDATE</span> t
+    <span class="kw">SET</span>
+        t.EndDate        = <span class="fn">GETDATE()</span>,
+        t.IsCurrent      = <span class="num">0</span>,
+        t.RecordModified = <span class="fn">GETDATE()</span>
+    <span class="kw">FROM</span> <span class="type">dw.DimCustomer</span> t
+    <span class="kw">INNER JOIN</span> <span class="type">staging.CRMCustomers</span> s
+        <span class="kw">ON</span> t.CustomerID = s.CustomerID
+    <span class="kw">WHERE</span> t.IsCurrent = <span class="num">1</span>
+      <span class="kw">AND</span> (
+          t.FullName    &lt;&gt; s.FullName <span class="kw">OR</span>
+          t.Email       &lt;&gt; s.Email <span class="kw">OR</span>
+          t.LoyaltyTier &lt;&gt; s.LoyaltyTier <span class="kw">OR</span>
+          t.Segment     &lt;&gt; s.Segment <span class="kw">OR</span>
+          t.Address     &lt;&gt; s.Address
+      );
+
+    <span class="section">-- Step 2: Insert new versions of changed records</span>
+    <span class="kw">INSERT INTO</span> <span class="type">dw.DimCustomer</span> (
+        CustomerID, FullName, Email, Phone, Address,
+        City, State, Segment, LoyaltyTier, LoyaltyPoints,
+        StartDate, EndDate, IsCurrent
+    )
+    <span class="kw">SELECT</span>
+        s.CustomerID, s.FullName, s.Email, s.Phone, s.Address,
+        s.City, s.State, s.Segment, s.LoyaltyTier, s.LoyaltyPoints,
+        <span class="fn">GETDATE()</span>, <span class="kw">NULL</span>, <span class="num">1</span>
+    <span class="kw">FROM</span> <span class="type">staging.CRMCustomers</span> s
+    <span class="kw">INNER JOIN</span> <span class="type">dw.DimCustomer</span> t <span class="kw">ON</span> s.CustomerID = t.CustomerID
+    <span class="kw">WHERE</span> t.IsCurrent = <span class="num">0</span>
+      <span class="kw">AND</span> t.EndDate = (<span class="kw">SELECT</span> <span class="fn">MAX</span>(EndDate) <span class="kw">FROM</span> <span class="type">dw.DimCustomer</span>
+                       <span class="kw">WHERE</span> CustomerID = s.CustomerID);
+
+    <span class="section">-- Step 3: Insert completely new customers</span>
+    <span class="kw">INSERT INTO</span> <span class="type">dw.DimCustomer</span> (...)
+    <span class="kw">SELECT</span> s.* <span class="kw">FROM</span> <span class="type">staging.CRMCustomers</span> s
+    <span class="kw">WHERE NOT EXISTS</span> (
+        <span class="kw">SELECT</span> <span class="num">1</span> <span class="kw">FROM</span> <span class="type">dw.DimCustomer</span> t
+        <span class="kw">WHERE</span> t.CustomerID = s.CustomerID
+    );
+<span class="kw">END</span>
+</pre>
+  </div>
+</div>
+</body>
+</html>

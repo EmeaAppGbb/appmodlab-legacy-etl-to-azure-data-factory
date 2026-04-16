@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Incremental Load — Watermark Pattern</title>
+<style>
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; padding: 32px; margin: 0; }
+  .window { background: #252526; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; max-width: 880px; margin: 0 auto; }
+  .titlebar { background: #3c3c3c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
+  .titlebar span { color: #aaa; font-size: 13px; margin-left: 12px; }
+  .content { padding: 20px 24px; font-size: 13px; line-height: 1.6; overflow-x: auto; }
+  .kw { color: #569cd6; } .str { color: #ce9178; } .fn { color: #dcdcaa; }
+  .comment { color: #6a9955; } .type { color: #4ec9b0; } .num { color: #b5cea8; }
+  h2 { color: #569cd6; margin: 0 0 12px 0; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span>SQL / IncrementalLoad / 01_Incremental_Load_Patterns.sql</span>
+  </div>
+  <div class="content">
+    <h2>🔄 Incremental Load — High Water Mark Pattern</h2>
+<pre>
+<span class="comment">-- Watermark tracking table: remembers "where we left off"</span>
+
+<span class="kw">CREATE TABLE</span> <span class="type">audit.WatermarkTable</span> (
+    SourceTable    <span class="fn">VARCHAR(255)</span> <span class="kw">PRIMARY KEY</span>,
+    WatermarkColumn <span class="fn">VARCHAR(100)</span>,
+    WatermarkValue  <span class="fn">SQL_VARIANT</span>,
+    LastUpdateDate  <span class="fn">DATETIME</span> <span class="kw">DEFAULT</span> <span class="fn">GETDATE()</span>
+);
+
+<span class="comment">-- Pre-populated watermarks</span>
+<span class="kw">INSERT INTO</span> <span class="type">audit.WatermarkTable</span> <span class="kw">VALUES</span>
+  (<span class="str">'POSSales'</span>,        <span class="str">'TransactionDate'</span>,  <span class="str">'2024-01-01'</span>),
+  (<span class="str">'InventoryLevels'</span>, <span class="str">'SnapshotDate'</span>,     <span class="str">'2024-01-01'</span>),
+  (<span class="str">'CRMCustomers'</span>,    <span class="str">'LastModifiedDate'</span>, <span class="str">'2024-01-01'</span>);
+
+<span class="comment">-- Get watermark before extract</span>
+<span class="kw">CREATE PROCEDURE</span> <span class="fn">audit.GetWatermark</span>
+    <span class="num">@SourceTable</span> <span class="fn">VARCHAR(255)</span>
+<span class="kw">AS BEGIN</span>
+    <span class="kw">SELECT</span> WatermarkValue, LastUpdateDate
+    <span class="kw">FROM</span> <span class="type">audit.WatermarkTable</span>
+    <span class="kw">WHERE</span> SourceTable = <span class="num">@SourceTable</span>;
+<span class="kw">END</span>
+
+<span class="comment">-- Update watermark after extract</span>
+<span class="kw">CREATE PROCEDURE</span> <span class="fn">audit.UpdateWatermark</span>
+    <span class="num">@SourceTable</span>  <span class="fn">VARCHAR(255)</span>,
+    <span class="num">@NewWatermark</span> <span class="fn">SQL_VARIANT</span>
+<span class="kw">AS BEGIN</span>
+    <span class="kw">UPDATE</span> <span class="type">audit.WatermarkTable</span>
+    <span class="kw">SET</span> WatermarkValue = <span class="num">@NewWatermark</span>,
+        LastUpdateDate = <span class="fn">GETDATE()</span>
+    <span class="kw">WHERE</span> SourceTable = <span class="num">@SourceTable</span>;
+<span class="kw">END</span>
+
+<span class="comment">-- POS extract query using watermark</span>
+<span class="kw">SELECT</span> <span class="fn">ISNULL</span>(<span class="fn">MAX</span>(TransactionDate), <span class="str">'1900-01-01'</span>) <span class="kw">AS</span> LastExtractDate
+<span class="kw">FROM</span> <span class="type">staging.POSSales</span>
+<span class="kw">WHERE</span> SourceSystem = <span class="str">'POS'</span>;
+</pre>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Star Schema — Brightfield Data Warehouse</title>
+<style>
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; padding: 32px; margin: 0; }
+  .window { background: #252526; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; max-width: 920px; margin: 0 auto; }
+  .titlebar { background: #3c3c3c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
+  .titlebar span { color: #aaa; font-size: 13px; margin-left: 12px; }
+  .content { padding: 20px 24px; font-size: 13px; line-height: 1.55; overflow-x: auto; }
+  .kw { color: #569cd6; } .str { color: #ce9178; } .fn { color: #dcdcaa; }
+  .comment { color: #6a9955; } .type { color: #4ec9b0; } .num { color: #b5cea8; }
+  h2 { color: #569cd6; margin: 0 0 12px 0; font-size: 15px; }
+  .col { color: #9cdcfe; } .dt { color: #4ec9b0; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span>SQL / DataWarehouse / 01_Create_DataWarehouse_Schema.sql</span>
+  </div>
+  <div class="content">
+    <h2>⭐ Star Schema — Brightfield Retail Analytics</h2>
+<pre>
+<span class="comment">/*  ═══════════════════════════════════════════════════════
+    DIMENSION TABLES                    FACT TABLES
+    ═══════════════════════════════════════════════════════ */</span>
+
+┌──────────────────────┐       ┌──────────────────────────────┐
+│ <span class="type">dw.DimDate</span>           │       │ <span class="type">dw.FactSales</span>                 │
+│ ──────────────────── │   ┌──▶│ ──────────────────────────── │
+│ <span class="col">DateKey</span>  <span class="dt">INT PK</span>     │   │   │ <span class="col">SalesKey</span>     <span class="dt">BIGINT PK</span>      │
+│ <span class="col">Date</span>     <span class="dt">DATE</span>       │───┘   │ <span class="col">DateKey</span>       <span class="dt">INT FK</span>  ──────┤
+│ <span class="col">DayOfWeek</span>           │       │ <span class="col">StoreKey</span>     <span class="dt">INT FK</span>  ──────┤
+│ <span class="col">Month, Quarter</span>      │       │ <span class="col">ProductKey</span>   <span class="dt">INT FK</span>  ──────┤
+│ <span class="col">FiscalYear</span>          │       │ <span class="col">CustomerKey</span>  <span class="dt">INT FK</span>  ──────┤
+│ <span class="col">IsHoliday, IsWeekend</span>│       │ <span class="col">TransactionID</span> <span class="dt">VARCHAR(50)</span>  │
+└──────────────────────┘       │ <span class="col">Quantity</span>     <span class="dt">INT</span>           │
+                               │ <span class="col">UnitPrice</span>    <span class="dt">DECIMAL</span>       │
+┌──────────────────────┐       │ <span class="col">Revenue</span>      <span class="dt">DECIMAL</span>       │
+│ <span class="type">dw.DimStore</span>          │───┐   │ <span class="col">Cost</span>         <span class="dt">DECIMAL</span>       │
+│ ──────────────────── │   │   │ <span class="col">GrossProfit</span>  <span class="dt">DECIMAL</span>       │
+│ <span class="col">StoreKey</span> <span class="dt">INT PK</span>     │   └──▶│ <span class="col">NetRevenue</span>   <span class="dt">DECIMAL</span>       │
+│ <span class="col">StoreID, StoreName</span>  │       └──────────────────────────────┘
+│ <span class="col">City, State, Region</span> │
+│ <span class="col">StoreFormat</span>         │       ┌──────────────────────────────┐
+└──────────────────────┘       │ <span class="type">dw.FactInventory</span>             │
+                               │ ──────────────────────────── │
+┌──────────────────────┐   ┌──▶│ <span class="col">InventoryKey</span>  <span class="dt">BIGINT PK</span>     │
+│ <span class="type">dw.DimProduct</span>        │───┘   │ <span class="col">DateKey</span>        <span class="dt">INT FK</span>       │
+│ ──────────────────── │       │ <span class="col">StoreKey</span>       <span class="dt">INT FK</span>       │
+│ <span class="col">ProductKey</span> <span class="dt">INT PK</span>   │       │ <span class="col">ProductKey</span>     <span class="dt">INT FK</span>       │
+│ <span class="col">ProductID, Name</span>     │       │ <span class="col">QuantityOnHand</span> <span class="dt">INT</span>          │
+│ <span class="col">Category, Brand</span>     │       │ <span class="col">DaysOfSupply</span>   <span class="dt">INT</span>          │
+│ <span class="col">IsCurrent</span> <span class="comment">(SCD1)</span>    │       │ <span class="col">InventoryValue</span> <span class="dt">DECIMAL</span>      │
+└──────────────────────┘       └──────────────────────────────┘
+
+┌──────────────────────┐
+│ <span class="type">dw.DimCustomer</span>       │
+│ ──────────────────── │
+│ <span class="col">CustomerKey</span> <span class="dt">INT PK</span>  │  <span class="comment">← SCD Type 2: tracks history</span>
+│ <span class="col">CustomerID, FullName</span>│
+│ <span class="col">Segment, LoyaltyTier</span>│
+│ <span class="col">StartDate, EndDate</span>  │
+│ <span class="col">IsCurrent</span> <span class="dt">BIT</span>       │
+└──────────────────────┘
+</pre>
+  </div>
+</div>
+</body>
+</html>

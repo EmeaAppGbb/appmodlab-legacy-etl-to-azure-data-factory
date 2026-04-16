@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Extract_POS_Sales.dtsx — Data Flow</title>
+<style>
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; padding: 32px; margin: 0; }
+  .window { background: #252526; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; max-width: 900px; margin: 0 auto; }
+  .titlebar { background: #3c3c3c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
+  .titlebar span { color: #aaa; font-size: 13px; margin-left: 12px; }
+  .content { padding: 20px 24px; font-size: 13px; line-height: 1.6; overflow-x: auto; }
+  .kw { color: #569cd6; font-weight: bold; }
+  .str { color: #ce9178; }
+  .fn { color: #dcdcaa; }
+  .comment { color: #6a9955; }
+  .type { color: #4ec9b0; }
+  .num { color: #b5cea8; }
+  h2 { color: #569cd6; margin: 0 0 12px 0; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span>SSIS-Packages / Extract / Extract_POS_Sales.dtsx</span>
+  </div>
+  <div class="content">
+    <h2>📡 Extract POS Sales — Incremental Load Data Flow</h2>
+<pre>
+<span class="comment">-- Connection: POS-SERVER → POSTransactions (OLEDB/SQLNCLI11.1)</span>
+<span class="comment">-- Target:     DW-SQL-SERVER → BrightfieldDW staging.POSSales</span>
+
+<span class="comment">── Step 1: Get Last Extract Date ──────────────────────────</span>
+<span class="kw">SELECT</span> <span class="fn">MAX</span>(ExtractDate) <span class="kw">FROM</span> audit.ExtractLog
+<span class="kw">WHERE</span> SourceSystem = <span class="str">'POS'</span>
+<span class="comment">→ stores result in @LastExtractDate variable</span>
+
+<span class="comment">── Step 2: Data Flow Task ─────────────────────────────────</span>
+
+  ┌─────────────────────────────────────────────────┐
+  │  <span class="type">OLE DB Source</span>: POS Sales Source                │
+  │                                                   │
+  │  <span class="kw">SELECT</span> TransactionID, StoreID, ProductID,       │
+  │         CustomerID, TransactionDate,              │
+  │         Quantity, UnitPrice, Discount, TotalAmount │
+  │  <span class="kw">FROM</span> dbo.SalesTransactions                      │
+  │  <span class="kw">WHERE</span> TransactionDate &gt; <span class="num">@LastExtractDate</span>         │
+  └───────────────────────┬─────────────────────────┘
+                          │
+                          ▼
+  ┌─────────────────────────────────────────────────┐
+  │  <span class="type">Derived Column</span>: Add Audit Columns              │
+  │                                                   │
+  │  ExtractDate  = <span class="fn">GETDATE()</span>                       │
+  │  SourceSystem = <span class="str">"POS"</span>                            │
+  └───────────────────────┬─────────────────────────┘
+                          │
+                          ▼
+  ┌─────────────────────────────────────────────────┐
+  │  <span class="type">OLE DB Destination</span>: staging.POSSales            │
+  │  FastLoad: TABLOCK, CHECK_CONSTRAINTS            │
+  └─────────────────────────────────────────────────┘
+
+<span class="comment">── Step 3: Log Extract Completion ─────────────────────────</span>
+<span class="kw">INSERT INTO</span> audit.ExtractLog (SourceSystem, ExtractDate, RowCount)
+<span class="kw">VALUES</span> (<span class="str">'POS'</span>, <span class="fn">GETDATE()</span>, <span class="num">@RowCount</span>)
+</pre>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MasterOrchestrator.dtsx — SSIS Pipeline</title>
+<style>
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; padding: 32px; margin: 0; }
+  .window { background: #252526; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; max-width: 900px; margin: 0 auto; }
+  .titlebar { background: #3c3c3c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
+  .titlebar span { color: #aaa; font-size: 13px; margin-left: 12px; }
+  .content { padding: 20px 24px; font-size: 13px; line-height: 1.6; overflow-x: auto; }
+  .tag { color: #569cd6; }
+  .attr { color: #9cdcfe; }
+  .val { color: #ce9178; }
+  .comment { color: #6a9955; }
+  .kw { color: #c586c0; }
+  h2 { color: #569cd6; margin: 0 0 12px 0; font-size: 15px; }
+  .label { color: #dcdcaa; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span>SSIS-Packages / Master / MasterOrchestrator.dtsx</span>
+  </div>
+  <div class="content">
+    <h2>🎭 Master Orchestrator — Sequential ETL Pipeline</h2>
+<pre>
+<span class="comment">&lt;!-- Master ETL orchestrator for Brightfield Retail Analytics --&gt;</span>
+<span class="comment">&lt;!-- Executes Extract → Transform → Load in strict sequence --&gt;</span>
+
+<span class="tag">&lt;DTS:Executable</span> <span class="attr">ObjectName</span>=<span class="val">"MasterOrchestrator"</span><span class="tag">&gt;</span>
+
+  <span class="comment">&lt;!-- Connection: Data Warehouse --&gt;</span>
+  <span class="tag">&lt;DTS:ConnectionManager</span> <span class="attr">ObjectName</span>=<span class="val">"DW_SQL_Server"</span><span class="tag">&gt;</span>
+    <span class="val">"Data Source=DW-SQL-SERVER;Initial Catalog=BrightfieldDW;..."</span>
+  <span class="tag">&lt;/DTS:ConnectionManager&gt;</span>
+
+  <span class="comment">&lt;!-- Variables --&gt;</span>
+  <span class="tag">&lt;Variable</span> <span class="attr">BatchID</span>=<span class="val">"0"</span> <span class="attr">ExecutionDate</span>=<span class="val">"2024-01-15"</span> <span class="tag">/&gt;</span>
+
+  <span class="comment">&lt;!-- ═══════ EXECUTION SEQUENCE ═══════ --&gt;</span>
+
+  <span class="kw">① SQL Task:</span> <span class="label">Initialize Batch</span>
+     <span class="val">EXEC audit.InitializeBatch</span>
+        <span class="comment">│</span>
+        <span class="comment">▼  (on success)</span>
+  <span class="kw">② Execute Package:</span> <span class="label">Extract Phase</span>
+     <span class="val">Extract_POS_Sales.dtsx</span>
+     <span class="val">Extract_Inventory.dtsx</span>
+     <span class="val">Extract_CRM_Customers.dtsx</span>
+     <span class="val">Extract_Ecommerce_Orders.dtsx</span>
+     <span class="val">Extract_Supplier_Files.dtsx</span>
+        <span class="comment">│</span>
+        <span class="comment">▼  (on success)</span>
+  <span class="kw">③ Execute Package:</span> <span class="label">Transform Phase</span>
+     <span class="val">Transform_DataQuality.dtsx</span>
+     <span class="val">Transform_CustomerDim.dtsx</span>  <span class="comment">← SCD Type 2</span>
+     <span class="val">Transform_SalesFacts.dtsx</span>   <span class="comment">← Surrogate key lookups</span>
+        <span class="comment">│</span>
+        <span class="comment">▼  (on success)</span>
+  <span class="kw">④ Execute Package:</span> <span class="label">Load Phase</span>
+     <span class="val">Load_FactSales.dtsx</span>  <span class="comment">← Drop/rebuild indexes</span>
+        <span class="comment">│</span>
+        <span class="comment">▼  (on success)</span>
+  <span class="kw">⑤ SQL Task:</span> <span class="label">Complete Batch</span>
+     <span class="val">EXEC audit.CompleteBatch</span>
+
+<span class="tag">&lt;/DTS:Executable&gt;</span>
+</pre>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Transform_SalesFacts.dtsx — Surrogate Key Lookups</title>
+<style>
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; padding: 32px; margin: 0; }
+  .window { background: #252526; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; max-width: 920px; margin: 0 auto; }
+  .titlebar { background: #3c3c3c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
+  .titlebar span { color: #aaa; font-size: 13px; margin-left: 12px; }
+  .content { padding: 20px 24px; font-size: 13px; line-height: 1.55; overflow-x: auto; }
+  .kw { color: #569cd6; } .str { color: #ce9178; } .fn { color: #dcdcaa; }
+  .comment { color: #6a9955; } .type { color: #4ec9b0; } .num { color: #b5cea8; }
+  .err { color: #f44747; } .ok { color: #27c93f; }
+  h2 { color: #569cd6; margin: 0 0 12px 0; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span>SSIS-Packages / Transform / Transform_SalesFacts.dtsx</span>
+  </div>
+  <div class="content">
+    <h2>⚙️ Transform Sales Facts — Dimension Lookups &amp; Quality Check</h2>
+<pre>
+  ┌─────────────────────────────────────────────────────────┐
+  │  <span class="type">OLE DB Source</span>: staging.POSSales                        │
+  │  <span class="kw">WHERE</span> TransactionDate &gt;= <span class="fn">DATEADD</span>(day, <span class="num">-1</span>, <span class="fn">GETDATE()</span>)  │
+  └────────────────────────────┬──────────────────────────┘
+                               ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │  <span class="type">Lookup</span>: Date Key        <span class="comment">— dw.DimDate (Full Cache)</span>     │
+  │  TransactionDate → DateKey                              │
+  └────────────────────────────┬──────────────────────────┘
+                               ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │  <span class="type">Lookup</span>: Store Key       <span class="comment">— dw.DimStore</span>                │
+  │  StoreID → StoreKey                                     │
+  └────────────────────────────┬──────────────────────────┘
+                               ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │  <span class="type">Lookup</span>: Product Key     <span class="comment">— dw.DimProduct (IsCurrent=1)</span> │
+  │  ProductID → ProductKey                                 │
+  └────────────────────────────┬──────────────────────────┘
+                               ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │  <span class="type">Lookup</span>: Customer Key    <span class="comment">— dw.DimCustomer (IsCurrent=1)</span>│
+  │  CustomerID → CustomerKey  <span class="comment">(SCD Type 2 aware)</span>          │
+  └────────────────────────────┬──────────────────────────┘
+                               ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │  <span class="type">Derived Column</span>: Calculate Metrics                     │
+  │  Revenue       = Quantity × UnitPrice                   │
+  │  DiscountAmount = Revenue × (Discount / 100)            │
+  │  NetRevenue    = Revenue − DiscountAmount               │
+  └────────────────────────────┬──────────────────────────┘
+                               ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │  <span class="type">Conditional Split</span>: Data Quality Check                 │
+  │  <span class="ok">✓ Valid:   Quantity &gt; 0 AND UnitPrice &gt; 0</span>   → Load    │
+  │  <span class="err">✗ Invalid: Quantity ≤ 0 OR  UnitPrice ≤ 0</span>   → Error   │
+  └──────────┬──────────────────────────┬──────────────────┘
+             ▼                          ▼
+  ┌─────────────────────┐  ┌──────────────────────────────┐
+  │ <span class="ok">dw.FactSales</span>        │  │ <span class="err">ETLErrors/InvalidSales.txt</span>  │
+  │ TABLOCK, CHECK_CONS │  │ Flat file error log          │
+  └─────────────────────┘  └──────────────────────────────┘
+</pre>
+  </div>
+</div>
+</body>
+</html>

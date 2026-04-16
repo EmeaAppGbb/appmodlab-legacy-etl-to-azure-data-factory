@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Brightfield ETL — Project Structure</title>
+<style>
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; padding: 32px; margin: 0; }
+  .window { background: #252526; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; max-width: 820px; margin: 0 auto; }
+  .titlebar { background: #3c3c3c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
+  .titlebar span { color: #aaa; font-size: 13px; margin-left: 12px; }
+  .content { padding: 20px 24px; font-size: 14px; line-height: 1.7; }
+  .dir { color: #4ec9b0; font-weight: bold; }
+  .file { color: #dcdcaa; }
+  .comment { color: #6a9955; font-style: italic; }
+  .indent { display: inline-block; }
+  .badge { display: inline-block; background: #264f78; color: #9cdcfe; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px; }
+  h2 { color: #569cd6; margin: 0 0 16px 0; font-size: 16px; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span>BrightfieldETL — Project Tree</span>
+  </div>
+  <div class="content">
+    <h2>📂 BrightfieldETL/</h2>
+<pre>
+<span class="dir">├── Config/</span>
+<span class="indent">│   </span><span class="file">├── Connections.dtsConfig</span>  <span class="comment">-- SSIS connection strings</span>
+<span class="indent">│   </span><span class="file">└── Environment.xml</span>       <span class="comment">-- Prod/Dev environment variables</span>
+<span class="dir">├── Documentation/</span>
+<span class="indent">│   </span><span class="file">└── README.md</span>
+<span class="dir">├── SampleData/</span>
+<span class="indent">│   </span><span class="file">├── POSSales_Sample.csv</span>        <span class="badge">20 rows</span>
+<span class="indent">│   </span><span class="file">├── InventorySnapshot_Sample.csv</span>
+<span class="indent">│   </span><span class="file">├── CRMCustomers_Sample.csv</span>
+<span class="indent">│   </span><span class="file">└── SupplierPricing_Sample.csv</span>
+<span class="dir">├── SQL/</span>
+<span class="indent">│   </span><span class="dir">├── DataWarehouse/</span>
+<span class="indent">│   │   </span><span class="file">├── 01_Create_DataWarehouse_Schema.sql</span>  <span class="badge">Star Schema</span>
+<span class="indent">│   │   </span><span class="file">└── 02_Create_Audit_Tables.sql</span>
+<span class="indent">│   </span><span class="dir">├── IncrementalLoad/</span>
+<span class="indent">│   │   </span><span class="file">└── 01_Incremental_Load_Patterns.sql</span>  <span class="badge">Watermark</span>
+<span class="indent">│   </span><span class="dir">├── StagingTables/</span>
+<span class="indent">│   │   </span><span class="file">└── 01_Create_Staging_Tables.sql</span>  <span class="badge">5 tables</span>
+<span class="indent">│   </span><span class="dir">└── StoredProcedures/</span>
+<span class="indent">│       </span><span class="file">└── 01_ETL_Stored_Procedures.sql</span>  <span class="badge">SCD2 + Merge</span>
+<span class="dir">└── SSIS-Packages/</span>
+<span class="indent">    </span><span class="dir">├── Extract/</span>  <span class="comment">-- 5 packages: POS, Inventory, CRM, E-commerce, Suppliers</span>
+<span class="indent">    </span><span class="dir">├── Transform/</span>  <span class="comment">-- 3 packages: CustomerDim, DataQuality, SalesFacts</span>
+<span class="indent">    </span><span class="dir">├── Load/</span>  <span class="comment">-- 1 package: FactSales</span>
+<span class="indent">    </span><span class="dir">├── Master/</span>  <span class="comment">-- MasterOrchestrator.dtsx</span>
+<span class="indent">    </span><span class="dir">└── Utility/</span>  <span class="comment">-- Audit_Framework.dtsx</span>
+</pre>
+  </div>
+</div>
+</body>
+</html>

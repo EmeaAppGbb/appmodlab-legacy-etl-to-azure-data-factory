@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SSIS Config — Connections &amp; Environments</title>
+<style>
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; padding: 32px; margin: 0; }
+  .window { background: #252526; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; max-width: 900px; margin: 0 auto; }
+  .titlebar { background: #3c3c3c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
+  .titlebar span { color: #aaa; font-size: 13px; margin-left: 12px; }
+  .content { padding: 20px 24px; font-size: 13px; line-height: 1.6; overflow-x: auto; }
+  .tag { color: #569cd6; } .attr { color: #9cdcfe; } .val { color: #ce9178; }
+  .comment { color: #6a9955; }
+  h2 { color: #569cd6; margin: 0 0 12px 0; font-size: 15px; }
+  .section { color: #c586c0; font-weight: bold; margin-top: 16px; display: block; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span>Config / Connections.dtsConfig + Environment.xml</span>
+  </div>
+  <div class="content">
+    <h2>🔌 SSIS Configuration — Connection Strings &amp; Environments</h2>
+<pre>
+<span class="section">── Connections.dtsConfig ──────────────────────────────────</span>
+
+<span class="tag">&lt;Configuration</span> <span class="attr">Path</span>=<span class="val">"DW_SQL_Server.ConnectionString"</span><span class="tag">&gt;</span>
+  <span class="val">Data Source=DW-SQL-SERVER; Catalog=BrightfieldDW; SQLNCLI11.1</span>
+<span class="tag">&lt;/Configuration&gt;</span>
+
+<span class="tag">&lt;Configuration</span> <span class="attr">Path</span>=<span class="val">"POS_Source.ConnectionString"</span><span class="tag">&gt;</span>
+  <span class="val">Data Source=POS-SERVER; Catalog=POSTransactions; SQLNCLI11.1</span>
+<span class="tag">&lt;/Configuration&gt;</span>
+
+<span class="tag">&lt;Configuration</span> <span class="attr">Path</span>=<span class="val">"CRM_Source.ConnectionString"</span><span class="tag">&gt;</span>
+  <span class="val">Data Source=CRM-SERVER; Catalog=CustomerCRM; SQLNCLI11.1</span>
+<span class="tag">&lt;/Configuration&gt;</span>
+
+<span class="tag">&lt;Configuration</span> <span class="attr">Path</span>=<span class="val">"FilePath"</span><span class="tag">&gt;</span>  <span class="val">\\FTP-SHARE\suppliers\</span>
+<span class="tag">&lt;Configuration</span> <span class="attr">Path</span>=<span class="val">"ApiEndpoint"</span><span class="tag">&gt;</span> <span class="val">https://api.brightfield-ecommerce.com/v1/orders</span>
+
+<span class="section">── Environment.xml (Production) ──────────────────────────</span>
+
+  DW_ServerName     = <span class="val">DW-PROD-SQL</span>
+  POS_ServerName    = <span class="val">POS-PROD-SQL</span>
+  CRM_ServerName    = <span class="val">CRM-PROD-SQL</span>
+  Oracle_Connection = <span class="val">Data Source=INVDB-PROD; User=etl_reader</span>
+  FTP_SharePath     = <span class="val">\\PROD-FTP\suppliers\</span>
+  ApiKey            = <span class="val">**** (Sensitive)</span>
+
+<span class="section">── Environment.xml (Development) ─────────────────────────</span>
+
+  DW_ServerName     = <span class="val">DW-DEV-SQL</span>
+  DW_DatabaseName   = <span class="val">BrightfieldDW_Dev</span>
+  ErrorLogPath      = <span class="val">C:\ETLErrors\</span>
+  ApiKey            = <span class="val">DEV_KEY</span>
+</pre>
+  </div>
+</div>
+</body>
+</html>
