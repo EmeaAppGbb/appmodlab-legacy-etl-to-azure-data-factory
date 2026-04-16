@@ -1,0 +1,37 @@
+{
+    "name": "trigger_nightly_etl_schedule",
+    "type": "Microsoft.DataFactory/factories/triggers",
+    "properties": {
+        "description": "Nightly schedule trigger that fires at 2:00 AM UTC daily to execute the master ETL orchestrator pipeline. Replaces the SQL Server Agent job schedule that launched MasterOrchestrator.dtsx nightly.",
+        "runtimeState": "Stopped",
+        "type": "ScheduleTrigger",
+        "typeProperties": {
+            "recurrence": {
+                "frequency": "Day",
+                "interval": 1,
+                "startTime": "2026-04-17T02:00:00Z",
+                "timeZone": "UTC",
+                "schedule": {
+                    "hours": [ 2 ],
+                    "minutes": [ 0 ]
+                }
+            }
+        },
+        "pipelines": [
+            {
+                "pipelineReference": {
+                    "referenceName": "pipeline_master_orchestrator",
+                    "type": "PipelineReference"
+                },
+                "parameters": {
+                    "ExecutionDate": "@trigger().scheduledTime"
+                }
+            }
+        ],
+        "annotations": [
+            "nightly",
+            "schedule",
+            "production"
+        ]
+    }
+}

@@ -1,0 +1,136 @@
+{
+    "name": "pipeline_error_handler",
+    "type": "Microsoft.DataFactory/factories/pipelines",
+    "properties": {
+        "description": "Centralized error handling pipeline for the Brightfield ETL orchestration. Logs failures to the audit database, sends alert notifications via Logic App webhook, and marks the batch as failed. Called by the master orchestrator on activity failures.",
+        "activities": [
+            {
+                "name": "LogErrorToAudit",
+                "description": "Log the error details to the audit.ErrorLog table for tracking and troubleshooting",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 15
+                },
+                "typeProperties": {
+                    "storedProcedureName": "[audit].[usp_LogError]",
+                    "storedProcedureParameters": {
+                        "PipelineName": {
+                            "value": { "value": "@pipeline().parameters.FailedPipeline", "type": "Expression" },
+                            "type": "String"
+                        },
+                        "ActivityName": {
+                            "value": { "value": "@pipeline().parameters.FailedActivity", "type": "Expression" },
+                            "type": "String"
+                        },
+                        "ErrorMessage": {
+                            "value": { "value": "@pipeline().parameters.ErrorMessage", "type": "Expression" },
+                            "type": "String"
+                        },
+                        "BatchID": {
+                            "value": { "value": "@pipeline().parameters.BatchID", "type": "Expression" },
+                            "type": "Int32"
+                        },
+                        "ErrorTimestamp": {
+                            "value": { "value": "@utcNow()", "type": "Expression" },
+                            "type": "DateTime"
+                        }
+                    }
+                },
+                "linkedServiceName": {
+                    "referenceName": "ls_sqlserver_dw",
+                    "type": "LinkedServiceReference"
+                }
+            },
+            {
+                "name": "MarkBatchFailed",
+                "description": "Update the audit batch record to reflect failure status",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                    {
+                        "activity": "LogErrorToAudit",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 15
+                },
+                "typeProperties": {
+                    "storedProcedureName": "[audit].[CompleteBatch]",
+                    "storedProcedureParameters": {
+                        "BatchStatus": { "value": "Failed", "type": "String" },
+                        "ErrorMessage": {
+                            "value": { "value": "@pipeline().parameters.ErrorMessage", "type": "Expression" },
+                            "type": "String"
+                        }
+                    }
+                },
+                "linkedServiceName": {
+                    "referenceName": "ls_sqlserver_dw",
+                    "type": "LinkedServiceReference"
+                }
+            },
+            {
+                "name": "SendAlertNotification",
+                "description": "Send failure alert via Logic App webhook for operations team notification (email/Teams)",
+                "type": "WebActivity",
+                "dependsOn": [
+                    {
+                        "activity": "LogErrorToAudit",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "url": {
+                        "value": "@pipeline().parameters.AlertWebhookUrl",
+                        "type": "Expression"
+                    },
+                    "method": "POST",
+                    "headers": {
+                        "Content-Type": "application/json"
+                    },
+                    "body": {
+                        "value": "@json(concat('{\"title\":\"Brightfield ETL Pipeline Failure\",\"pipeline\":\"', pipeline().parameters.FailedPipeline, '\",\"activity\":\"', pipeline().parameters.FailedActivity, '\",\"error\":\"', replace(pipeline().parameters.ErrorMessage, '\"', '\\\"'), '\",\"batchId\":', string(pipeline().parameters.BatchID), ',\"timestamp\":\"', utcNow(), '\",\"dataFactoryName\":\"', pipeline().DataFactory, '\",\"runId\":\"', pipeline().RunId, '\"}'))",
+                        "type": "Expression"
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "FailedPipeline": {
+                "type": "string"
+            },
+            "FailedActivity": {
+                "type": "string"
+            },
+            "ErrorMessage": {
+                "type": "string"
+            },
+            "BatchID": {
+                "type": "int",
+                "defaultValue": 0
+            },
+            "AlertWebhookUrl": {
+                "type": "string",
+                "defaultValue": "https://prod-00.westeurope.logic.azure.com/workflows/brightfield-etl-alerts/triggers/manual/paths/invoke"
+            }
+        },
+        "folder": {
+            "name": "Orchestration"
+        },
+        "annotations": [
+            "error-handling",
+            "orchestration",
+            "alerts"
+        ]
+    }
+}

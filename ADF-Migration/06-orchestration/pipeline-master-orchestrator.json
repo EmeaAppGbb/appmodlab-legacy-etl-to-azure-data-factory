@@ -1,0 +1,411 @@
+{
+    "name": "pipeline_master_orchestrator",
+    "type": "Microsoft.DataFactory/factories/pipelines",
+    "properties": {
+        "description": "Master ETL orchestrator replacing MasterOrchestrator.dtsx. Executes Extract (parallel), Transform (sequential), and Load phases with audit batch tracking. Original SSIS flow: Initialize Batch → Extract Phase → Transform Phase → Load Phase → Complete Batch, connected by precedence constraints requiring success (EvalOp=1, Value=0).",
+        "activities": [
+            {
+                "name": "InitializeBatch",
+                "description": "Initialize audit batch (replaces SSIS 'Initialize Batch' Execute SQL Task that called audit.InitializeBatch)",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "storedProcedureName": "[audit].[InitializeBatch]",
+                    "storedProcedureParameters": {
+                        "ExecutionDate": {
+                            "value": { "value": "@pipeline().parameters.ExecutionDate", "type": "Expression" },
+                            "type": "DateTime"
+                        }
+                    }
+                },
+                "linkedServiceName": {
+                    "referenceName": "ls_sqlserver_dw",
+                    "type": "LinkedServiceReference"
+                }
+            },
+            {
+                "name": "ExtractPOSSales",
+                "description": "Execute POS sales extraction pipeline (replaces SSIS ExecutePackageTask for Extract_POS_Sales.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeBatch",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_extract_pos_sales",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "ExtractInventory",
+                "description": "Execute inventory extraction pipeline (replaces SSIS ExecutePackageTask for Extract_Inventory.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeBatch",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_extract_inventory",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "ExtractCRMCustomers",
+                "description": "Execute CRM customers extraction pipeline (replaces SSIS ExecutePackageTask for Extract_CRM_Customers.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeBatch",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_extract_crm_customers",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "ExtractEcommerceOrders",
+                "description": "Execute e-commerce orders extraction pipeline (replaces SSIS ExecutePackageTask for Extract_Ecommerce_Orders.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeBatch",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_extract_ecommerce_orders",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "ExtractSupplierFiles",
+                "description": "Execute supplier files extraction pipeline (replaces SSIS ExecutePackageTask for Extract_Supplier_Files.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeBatch",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_extract_supplier_files",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "TransformDataQuality",
+                "description": "Execute data quality transforms (replaces SSIS ExecutePackageTask for Transform_DataQuality.dtsx — must run first in transform phase)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "ExtractPOSSales",
+                        "dependencyConditions": [ "Succeeded" ]
+                    },
+                    {
+                        "activity": "ExtractInventory",
+                        "dependencyConditions": [ "Succeeded" ]
+                    },
+                    {
+                        "activity": "ExtractCRMCustomers",
+                        "dependencyConditions": [ "Succeeded" ]
+                    },
+                    {
+                        "activity": "ExtractEcommerceOrders",
+                        "dependencyConditions": [ "Succeeded" ]
+                    },
+                    {
+                        "activity": "ExtractSupplierFiles",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_transform_data_quality",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "TransformCustomerDim",
+                "description": "Execute customer dimension transforms (replaces SSIS ExecutePackageTask for Transform_CustomerDim.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "TransformDataQuality",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_transform_customer_dim",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "TransformSalesFacts",
+                "description": "Execute sales fact transforms (replaces SSIS ExecutePackageTask for Transform_SalesFacts.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "TransformCustomerDim",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_transform_sales_facts",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "TransformInventoryFacts",
+                "description": "Execute inventory fact transforms (replaces SSIS ExecutePackageTask for Transform_InventoryFacts.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "TransformSalesFacts",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_transform_inventory_facts",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "LoadDimensions",
+                "description": "Execute dimension load (replaces SSIS ExecutePackageTask for Load_Dimensions.dtsx — must load dims before facts)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "TransformInventoryFacts",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_load_dimensions",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "LoadFactSales",
+                "description": "Execute fact sales load (replaces SSIS ExecutePackageTask for Load_FactSales.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "LoadDimensions",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_load_fact_sales",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "LoadFactInventory",
+                "description": "Execute fact inventory load (replaces SSIS ExecutePackageTask for Load_FactInventory.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "LoadDimensions",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_load_fact_inventory",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "LoadAggregations",
+                "description": "Execute aggregation load (replaces SSIS ExecutePackageTask for Load_Aggregations.dtsx)",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "LoadFactSales",
+                        "dependencyConditions": [ "Succeeded" ]
+                    },
+                    {
+                        "activity": "LoadFactInventory",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_load_aggregations",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true
+                }
+            },
+            {
+                "name": "CompleteBatch",
+                "description": "Complete audit batch on success (replaces SSIS 'Complete Batch' Execute SQL Task that called audit.CompleteBatch)",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                    {
+                        "activity": "LoadAggregations",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "storedProcedureName": "[audit].[CompleteBatch]",
+                    "storedProcedureParameters": {
+                        "BatchStatus": { "value": "Success", "type": "String" }
+                    }
+                },
+                "linkedServiceName": {
+                    "referenceName": "ls_sqlserver_dw",
+                    "type": "LinkedServiceReference"
+                }
+            },
+            {
+                "name": "OnFailure_ExecuteErrorHandler",
+                "description": "On any extract/transform/load failure, invoke error handler pipeline",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "TransformDataQuality",
+                        "dependencyConditions": [ "Failed" ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "pipeline_error_handler",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "FailedPipeline": { "value": "@pipeline().Pipeline", "type": "Expression" },
+                        "FailedActivity": { "value": "TransformDataQuality", "type": "Expression" },
+                        "ErrorMessage": { "value": "@activity('TransformDataQuality').error.message", "type": "Expression" },
+                        "BatchID": { "value": "@pipeline().parameters.BatchID", "type": "Expression" }
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "ExecutionDate": {
+                "type": "string",
+                "defaultValue": {
+                    "value": "@utcNow('yyyy-MM-dd')",
+                    "type": "Expression"
+                }
+            },
+            "BatchID": {
+                "type": "int",
+                "defaultValue": 0
+            }
+        },
+        "variables": {
+            "BatchID": {
+                "type": "String",
+                "defaultValue": "0"
+            },
+            "PipelineStatus": {
+                "type": "String",
+                "defaultValue": "Running"
+            }
+        },
+        "folder": {
+            "name": "Orchestration"
+        },
+        "annotations": [
+            "orchestrator",
+            "master-pipeline",
+            "migrated-from-ssis",
+            "MasterOrchestrator.dtsx"
+        ]
+    }
+}

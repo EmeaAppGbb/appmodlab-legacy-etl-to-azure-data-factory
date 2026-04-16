@@ -1,0 +1,62 @@
+ÔùÅ List directory ADF-Migration
+  Ôöö 5 files found
+
+ÔùÅ Search (glob)
+  Ôöé "BrightfieldETL/**/*.dtsx"
+  Ôöö 11 files found
+
+ÔùÅ Read MasterOrchestrator.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Master\MasterOrchestrator.dtsx
+  Ôöö 95 lines read
+
+ÔùÅ Search (glob)
+  Ôöé "**/*.json" in ADF-Migration
+  Ôöö 27 files found
+
+Let me check an existing pipeline for style consistency.
+
+ÔùÅ Read pipeline-extract-pos-sales.json
+  Ôöé ADF-Migration\03-extract-pipelines\pipelines\pipeline-extract-pos-sales.json
+  Ôöö 144 lines read
+
+Good. Now I have the full picture ÔÇö the MasterOrchestrator.dtsx flow and the ADF pipeline style. Let me create all four files.
+
+ÔùÅ Create 06-orchestration directory (shell)
+  Ôöé New-Item -ItemType Directory -Path "C:\code\gbb\labs\appmodlab-legacy-etl-to
+  Ôöé -azure-data-factory\ADF-Migration\06-orchestration" -Force
+  Ôöö 4 lines...
+
+ÔùÅ Create pipeline-master-orchestrator.json +412
+  Ôöö ADF-Migration\06-orchestration\pipeline-master-orchestrator.json
+
+ÔùÅ Create trigger-nightly-schedule.json +38
+  Ôöö ADF-Migration\06-orchestration\trigger-nightly-schedule.json
+
+ÔùÅ Create pipeline-error-handler.json +137
+  Ôöö ADF-Migration\06-orchestration\pipeline-error-handler.json
+
+ÔùÅ Create trigger-tumbling-window.json +35
+  Ôöö ADF-Migration\06-orchestration\trigger-tumbling-window.json
+
+Let me validate the JSON files are well-formed:
+
+ÔùÅ Validate JSON files (shell)
+  Ôöé Get-ChildItem "C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-factory\A
+  Ôöé DF-Migration\06-orchestration\*.json" | ForEach-Object { $name = $_.Name;
+  Ôöé try { Get-Content $_.FullName -Raw | ConvertFrom-Json | Out-Null; "$name -
+  Ôöé valid JSON" } catch { "$name - INVALID: $_" } }
+  Ôöö 5 lines...
+
+All four files created and validated in `ADF-Migration/06-orchestration/`:
+
+| File | Description |
+|---|---|
+| `pipeline-master-orchestrator.json` | Replaces `MasterOrchestrator.dtsx` ÔÇö InitializeBatch ÔåÆ 5 parallel extracts ÔåÆ sequential transforms (DataQuality ÔåÆ CustomerDim ÔåÆ SalesFacts ÔåÆ InventoryFacts) ÔåÆ Loads (Dims first, then parallel facts, then aggregations) ÔåÆ CompleteBatch. Includes error handler invocation on failure. |
+| `pipeline-error-handler.json` | Logs errors to `audit.ErrorLog`, marks batch as failed, and sends alert via Logic App webhook. |
+| `trigger-nightly-schedule.json` | Schedule trigger firing daily at 2:00 AM UTC. |
+| `trigger-tumbling-window.json` | Tumbling window trigger with 24-hour windows, `maxConcurrency: 1`, and retry policy (3 retries, 10-min intervals) for guaranteed exactly-once incremental processing. |
+
+
+Changes   +622 -0
+Requests  3 Premium (1m 49s)
+Tokens    Ôåæ 240.7k ÔÇó Ôåô 7.5k ÔÇó 175.6k (cached)
