@@ -1,0 +1,34 @@
+{
+    "name": "ds_sqlserver_crm_customers",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "CRM Customers source dataset (maps to SSIS dbo.Customers query for active customers)",
+        "linkedServiceName": {
+            "referenceName": "ls_sqlserver_crm",
+            "type": "LinkedServiceReference"
+        },
+        "type": "SqlServerTable",
+        "typeProperties": {
+            "schema": "dbo",
+            "table": "Customers"
+        },
+        "schema": [
+            { "name": "CustomerID", "type": "int" },
+            { "name": "FirstName", "type": "nvarchar" },
+            { "name": "LastName", "type": "nvarchar" },
+            { "name": "Email", "type": "nvarchar" },
+            { "name": "Phone", "type": "nvarchar" },
+            { "name": "Address", "type": "nvarchar" },
+            { "name": "City", "type": "nvarchar" },
+            { "name": "State", "type": "nvarchar" },
+            { "name": "ZipCode", "type": "nvarchar" },
+            { "name": "Country", "type": "nvarchar" },
+            { "name": "LoyaltyTier", "type": "nvarchar" },
+            { "name": "LoyaltyPoints", "type": "int" },
+            { "name": "Segment", "type": "nvarchar" },
+            { "name": "CreatedDate", "type": "datetime" },
+            { "name": "LastModifiedDate", "type": "datetime" },
+            { "name": "IsActive", "type": "bit" }
+        ]
+    }
+}

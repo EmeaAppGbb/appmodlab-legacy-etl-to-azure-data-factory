@@ -1,0 +1,24 @@
+{
+    "name": "ds_adls_parquet_crm_customers",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "ADLS Gen2 Parquet sink for CRM Customer data (replaces SSIS staging.CRMCustomers OLEDB destination)",
+        "linkedServiceName": {
+            "referenceName": "ls_adls_gen2",
+            "type": "LinkedServiceReference"
+        },
+        "type": "Parquet",
+        "typeProperties": {
+            "location": {
+                "type": "AzureBlobFSLocation",
+                "fileSystem": "raw",
+                "folderPath": {
+                    "value": "crm-customers/@{formatDateTime(utcNow(), 'yyyy/MM/dd')}",
+                    "type": "Expression"
+                },
+                "fileName": "crm_customers.parquet"
+            },
+            "compressionCodec": "snappy"
+        }
+    }
+}

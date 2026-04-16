@@ -1,0 +1,66 @@
+{
+    "name": "pipeline_extract_inventory",
+    "type": "Microsoft.DataFactory/factories/pipelines",
+    "properties": {
+        "description": "Extracts inventory levels from Oracle to ADLS Gen2 Parquet. Migrated from Extract_Inventory.dtsx which used ADO.NET Oracle Source querying INVENTORY.STOCK_LEVELS with SNAPSHOT_DATE = TRUNC(SYSDATE), Data Conversion for Oracle NUMBER types, and OLEDB Destination to staging.InventoryLevels.",
+        "activities": [
+            {
+                "name": "CopyInventoryFromOracle",
+                "description": "Copy today's inventory snapshot from Oracle STOCK_LEVELS to ADLS Gen2 Parquet (replaces SSIS Data Flow with ADO.NET Source, Data Conversion, and OLE DB Destination)",
+                "type": "Copy",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.01:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "OracleSource",
+                        "oracleReaderQuery": "SELECT STORE_ID, PRODUCT_ID, QUANTITY_ON_HAND, QUANTITY_ON_ORDER, LAST_RESTOCK_DATE, REORDER_POINT, SNAPSHOT_DATE FROM INVENTORY.STOCK_LEVELS WHERE SNAPSHOT_DATE = TRUNC(SYSDATE)"
+                    },
+                    "sink": {
+                        "type": "ParquetSink",
+                        "storeSettings": {
+                            "type": "AzureBlobFSWriteSettings"
+                        },
+                        "formatSettings": {
+                            "type": "ParquetWriteSettings"
+                        }
+                    },
+                    "enableStaging": false,
+                    "translator": {
+                        "type": "TabularTranslator",
+                        "mappings": [
+                            { "source": { "name": "STORE_ID", "type": "Decimal" }, "sink": { "name": "StoreID", "type": "Int32" } },
+                            { "source": { "name": "PRODUCT_ID", "type": "Decimal" }, "sink": { "name": "ProductID", "type": "Int32" } },
+                            { "source": { "name": "QUANTITY_ON_HAND", "type": "Decimal" }, "sink": { "name": "QuantityOnHand", "type": "Int32" } },
+                            { "source": { "name": "QUANTITY_ON_ORDER", "type": "Decimal" }, "sink": { "name": "QuantityOnOrder", "type": "Int32" } },
+                            { "source": { "name": "LAST_RESTOCK_DATE", "type": "DateTime" }, "sink": { "name": "LastRestockDate", "type": "DateTime" } },
+                            { "source": { "name": "REORDER_POINT", "type": "Decimal" }, "sink": { "name": "ReorderPoint", "type": "Int32" } },
+                            { "source": { "name": "SNAPSHOT_DATE", "type": "DateTime" }, "sink": { "name": "SnapshotDate", "type": "DateTime" } }
+                        ]
+                    }
+                },
+                "inputs": [
+                    {
+                        "referenceName": "ds_oracle_inventory_levels",
+                        "type": "DatasetReference"
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "ds_adls_parquet_inventory",
+                        "type": "DatasetReference"
+                    }
+                ]
+            }
+        ],
+        "annotations": [
+            "extract",
+            "inventory",
+            "oracle",
+            "migrated-from-ssis"
+        ]
+    }
+}

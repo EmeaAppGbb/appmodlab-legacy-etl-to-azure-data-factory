@@ -1,0 +1,22 @@
+{
+    "name": "ls_oracle_inventory",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+        "description": "Oracle linked service for Inventory Management system (migrated from SSIS Oracle_Inventory ADO.NET connection)",
+        "type": "Oracle",
+        "typeProperties": {
+            "connectionString": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "ls_keyvault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "oracle-inventory-connection-string"
+            }
+        },
+        "connectVia": {
+            "referenceName": "SelfHostedIntegrationRuntime",
+            "type": "IntegrationRuntimeReference"
+        }
+    }
+}

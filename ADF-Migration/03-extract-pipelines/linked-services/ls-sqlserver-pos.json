@@ -1,0 +1,22 @@
+{
+    "name": "ls_sqlserver_pos",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+        "description": "SQL Server linked service for POS Transactions database (migrated from SSIS POS_Source OLEDB connection)",
+        "type": "SqlServer",
+        "typeProperties": {
+            "connectionString": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "ls_keyvault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "pos-sqlserver-connection-string"
+            }
+        },
+        "connectVia": {
+            "referenceName": "SelfHostedIntegrationRuntime",
+            "type": "IntegrationRuntimeReference"
+        }
+    }
+}

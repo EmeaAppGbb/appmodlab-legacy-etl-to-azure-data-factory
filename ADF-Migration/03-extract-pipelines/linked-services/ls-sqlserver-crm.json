@@ -1,0 +1,22 @@
+{
+    "name": "ls_sqlserver_crm",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+        "description": "SQL Server linked service for CRM Customer database (migrated from SSIS CRM_Source OLEDB connection)",
+        "type": "SqlServer",
+        "typeProperties": {
+            "connectionString": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "ls_keyvault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "crm-sqlserver-connection-string"
+            }
+        },
+        "connectVia": {
+            "referenceName": "SelfHostedIntegrationRuntime",
+            "type": "IntegrationRuntimeReference"
+        }
+    }
+}

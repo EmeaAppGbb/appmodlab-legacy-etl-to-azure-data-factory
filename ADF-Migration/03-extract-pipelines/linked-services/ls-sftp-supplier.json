@@ -1,0 +1,24 @@
+{
+    "name": "ls_sftp_supplier",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+        "description": "SFTP linked service for supplier pricing files (replaces SSIS FTP flat file connection to \\\\FTP-SHARE\\suppliers)",
+        "type": "Sftp",
+        "typeProperties": {
+            "host": "sftp.brightfield-suppliers.com",
+            "port": 22,
+            "authenticationType": "SshPublicKey",
+            "userName": "etl_reader",
+            "privateKeyPath": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "ls_keyvault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "sftp-supplier-private-key"
+            },
+            "skipHostKeyValidation": false,
+            "hostKeyFingerprint": ""
+        }
+    }
+}

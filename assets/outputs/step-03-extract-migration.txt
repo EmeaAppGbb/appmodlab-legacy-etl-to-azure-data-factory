@@ -1,0 +1,148 @@
+ÔùÅ List directory BrightfieldETL\SSIS-Packages\Extract
+  Ôöö 5 files found
+
+ÔùÅ List directory ADF-Migration
+  Ôöö 2 files found
+
+ÔùÅ Read Extract_Inventory.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_Inventory.dtsx
+  Ôöö 66 lines read
+
+ÔùÅ Read Extract_POS_Sales.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_POS_Sales.dtsx
+  Ôöö 101 lines read
+
+ÔùÅ Read Extract_CRM_Customers.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_CRM_Customers.dtsx
+  Ôöö 81 lines read
+
+ÔùÅ Read Extract_Ecommerce_Orders.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_Ecommerce_Orders.dtsx
+  Ôöö 65 lines read
+
+ÔùÅ Read Extract_Supplier_Files.dtsx
+  Ôöé BrightfieldETL\SSIS-Packages\Extract\Extract_Supplier_Files.dtsx
+  Ôöö 75 lines read
+
+Now I have all 5 DTSX files analyzed. Let me create the directories and all JSON files.
+
+ÔùÅ Create directory structure (shell)
+  Ôöé New-Item -ItemType Directory -Force -Path
+  Ôöé "C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-factory\ADF-Migration
+  Ôöé \03-extract-pipelines\linked-services", "C:\code\gbb\labs\appmodlab-legacy
+  Ôöé -etl-to-azure-data-factory\ADF-Migration\03-extract-pipelines\datasets",
+  Ôöé "C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-factory\ADF-MigrationÔÇª
+  Ôöö 7 lines...
+
+Now let me create all the linked service files:
+
+ÔùÅ Create ls-sqlserver-pos.json +23
+  Ôöö ADF-Migration\03-extract-pipelines\linked-services\ls-sqlserver-pos.json
+
+ÔùÅ Create ls-rest-ecommerce.json +23
+  Ôöö ADF-Migration\03-extract-pipelines\linked-services\ls-rest-ecommerce.json
+
+ÔùÅ Create ls-adls-gen2.json +20
+  Ôöö ADF-Migration\03-extract-pipelines\linked-services\ls-adls-gen2.json
+
+ÔùÅ Create ls-sqlserver-crm.json +23
+  Ôöö ADF-Migration\03-extract-pipelines\linked-services\ls-sqlserver-crm.json
+
+ÔùÅ Create ls-oracle-inventory.json +23
+  Ôöö ADF-Migration\03-extract-pipelines\linked-services\ls-oracle-inventory.json
+
+ÔùÅ Create ls-sftp-supplier.json +25
+  Ôöö ADF-Migration\03-extract-pipelines\linked-services\ls-sftp-supplier.json
+
+Now create all dataset files:
+
+ÔùÅ Create ds-rest-ecommerce-orders.json +21
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-rest-ecommerce-orders.json
+
+ÔùÅ Create ds-oracle-inventory-levels.json +26
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-oracle-inventory-levels.json
+
+ÔùÅ Create ds-sftp-supplier-csv.json +38
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-sftp-supplier-csv.json
+
+ÔùÅ Create ds-sqlserver-pos-sales.json +28
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-sqlserver-pos-sales.json
+
+ÔùÅ Create ds-sqlserver-crm-customers.json +35
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-sqlserver-crm-customers.json
+
+ÔùÅ Create ds-adls-parquet-inventory.json +25
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-adls-parquet-inventory.json
+
+ÔùÅ Create ds-adls-parquet-crm-customers.json +25
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-adls-parquet-crm-customers.js
+    on
+
+ÔùÅ Create ds-adls-parquet-pos-sales.json +25
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-adls-parquet-pos-sales.json
+
+ÔùÅ Create ds-adls-json-ecommerce-orders.json +24
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-adls-json-ecommerce-orders.js
+    on
+
+ÔùÅ Create ds-adls-parquet-supplier-pricing.json +28
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-adls-parquet-supplier-pricing
+    .json
+
+ÔùÅ Create ds-sqlserver-pos-watermark.json +17
+  Ôöö ADF-Migration\03-extract-pipelines\datasets\ds-sqlserver-pos-watermark.json
+
+Now create all 5 pipeline files:
+
+ÔùÅ Create pipeline-extract-pos-sales.json +145
+  Ôöö ADF-Migration\03-extract-pipelines\pipelines\pipeline-extract-pos-sales.json
+
+ÔùÅ Create pipeline-extract-inventory.json +67
+  Ôöö ADF-Migration\03-extract-pipelines\pipelines\pipeline-extract-inventory.json
+
+ÔùÅ Create pipeline-extract-ecommerce-orders.json +88
+  Ôöö ADF-Migration\03-extract-pipelines\pipelines\pipeline-extract-ecommerce-orde
+    rs.json
+
+ÔùÅ Create pipeline-extract-supplier-files.json +121
+  Ôöö ADF-Migration\03-extract-pipelines\pipelines\pipeline-extract-supplier-files
+    .json
+
+ÔùÅ Create pipeline-extract-crm-customers.json +55
+  Ôöö ADF-Migration\03-extract-pipelines\pipelines\pipeline-extract-crm-customers.
+    json
+
+Let me validate the JSON files are well-formed:
+
+ÔùÅ Validate all JSON files (shell)
+  Ôöé Get-ChildItem -Recurse "C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-
+  Ôöé factory\ADF-Migration\03-extract-pipelines" -Filter "*.json" |
+  Ôöé ForEach-Object { try { Get-Content $_.FullName -Raw | ConvertFrom-Json |
+  Ôöé Out-Null; "$($_.Name): VALID" } catch { "$($_.Name): INVALID - $_" } }
+  Ôöö 23 lines...
+
+All 22 JSON files are valid. Here's a summary of what was created:
+
+**`ADF-Migration/03-extract-pipelines/`** ÔÇö 22 files across 3 folders:
+
+**Linked Services (6):**
+- `ls-sqlserver-pos.json` ÔÇö SQL Server (POS), Self-Hosted IR, Key Vault secrets
+- `ls-oracle-inventory.json` ÔÇö Oracle (Inventory), Self-Hosted IR
+- `ls-sqlserver-crm.json` ÔÇö SQL Server (CRM)
+- `ls-rest-ecommerce.json` ÔÇö REST API with API key auth
+- `ls-sftp-supplier.json` ÔÇö SFTP with SSH key auth
+- `ls-adls-gen2.json` ÔÇö ADLS Gen2 common sink
+
+**Datasets (11):** Source + sink datasets for each pipeline, plus a watermark table dataset.
+
+**Pipelines (5):**
+1. **POS Sales** ÔÇö Lookup watermark ÔåÆ Copy incremental ÔåÆ Update watermark (3-step pattern)
+2. **Inventory** ÔÇö Oracle Copy with TabularTranslator for NUMBERÔåÆINT type conversion
+3. **CRM Customers** ÔÇö Full copy with FullName/ExtractTimestamp computed in SQL query
+4. **E-commerce Orders** ÔÇö REST connector with pagination replacing C# Script Task
+5. **Supplier Files** ÔÇö GetMetadata + ForEach + Copy replacing FTP file enumerator loop
+
+
+Changes   +905 -0
+Requests  3 Premium (2m 58s)
+Tokens    Ôåæ 310.8k ÔÇó Ôåô 13.9k ÔÇó 221.4k (cached)

@@ -1,0 +1,24 @@
+{
+    "name": "ds_adls_parquet_inventory",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "ADLS Gen2 Parquet sink for Inventory data (replaces SSIS staging.InventoryLevels OLEDB destination)",
+        "linkedServiceName": {
+            "referenceName": "ls_adls_gen2",
+            "type": "LinkedServiceReference"
+        },
+        "type": "Parquet",
+        "typeProperties": {
+            "location": {
+                "type": "AzureBlobFSLocation",
+                "fileSystem": "raw",
+                "folderPath": {
+                    "value": "inventory/@{formatDateTime(utcNow(), 'yyyy/MM/dd')}",
+                    "type": "Expression"
+                },
+                "fileName": "inventory_levels.parquet"
+            },
+            "compressionCodec": "snappy"
+        }
+    }
+}

@@ -1,0 +1,144 @@
+{
+    "name": "pipeline_extract_pos_sales",
+    "type": "Microsoft.DataFactory/factories/pipelines",
+    "properties": {
+        "description": "Extracts POS sales transactions using watermark-based incremental load from SQL Server to ADLS Gen2 Parquet. Migrated from Extract_POS_Sales.dtsx which used OLEDB Source with parameterized query filtered by LastExtractDate, Derived Column for audit fields, and OLEDB Destination to staging.POSSales.",
+        "activities": [
+            {
+                "name": "LookupLastWatermark",
+                "description": "Get last extract date from watermark table (replaces SSIS 'Get Last Extract Date' SQL Task that queried audit.ExtractLog)",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlServerSource",
+                        "sqlReaderQuery": "SELECT COALESCE(MAX(ExtractDate), '1900-01-01') AS LastExtractDate FROM audit.ExtractLog WHERE SourceSystem = 'POS'"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_sqlserver_pos_watermark",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "LookupCurrentWatermark",
+                "description": "Get current max TransactionDate to set as new watermark ceiling",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlServerSource",
+                        "sqlReaderQuery": "SELECT MAX(TransactionDate) AS CurrentWatermark FROM dbo.SalesTransactions"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_sqlserver_pos_sales",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "CopyPOSSalesIncremental",
+                "description": "Incremental copy of POS sales using watermark (replaces SSIS Data Flow with parameterized OLE DB Source WHERE TransactionDate > ?)",
+                "type": "Copy",
+                "dependsOn": [
+                    {
+                        "activity": "LookupLastWatermark",
+                        "dependencyConditions": [ "Succeeded" ]
+                    },
+                    {
+                        "activity": "LookupCurrentWatermark",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.01:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlServerSource",
+                        "sqlReaderQuery": {
+                            "value": "SELECT TransactionID, StoreID, ProductID, CustomerID, TransactionDate, Quantity, UnitPrice, Discount, TotalAmount, GETDATE() AS ExtractDate, 'POS' AS SourceSystem FROM dbo.SalesTransactions WHERE TransactionDate > '@{activity('LookupLastWatermark').output.firstRow.LastExtractDate}' AND TransactionDate <= '@{activity('LookupCurrentWatermark').output.firstRow.CurrentWatermark}'",
+                            "type": "Expression"
+                        }
+                    },
+                    "sink": {
+                        "type": "ParquetSink",
+                        "storeSettings": {
+                            "type": "AzureBlobFSWriteSettings"
+                        },
+                        "formatSettings": {
+                            "type": "ParquetWriteSettings"
+                        }
+                    },
+                    "enableStaging": false
+                },
+                "inputs": [
+                    {
+                        "referenceName": "ds_sqlserver_pos_sales",
+                        "type": "DatasetReference"
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "ds_adls_parquet_pos_sales",
+                        "type": "DatasetReference"
+                    }
+                ]
+            },
+            {
+                "name": "UpdateWatermark",
+                "description": "Log extract completion and update watermark (replaces SSIS 'Log Extract' SQL Task that inserted into audit.ExtractLog)",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                    {
+                        "activity": "CopyPOSSalesIncremental",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "storedProcedureName": "[audit].[usp_UpdateExtractLog]",
+                    "storedProcedureParameters": {
+                        "SourceSystem": { "value": "POS", "type": "String" },
+                        "ExtractDate": {
+                            "value": { "value": "@activity('LookupCurrentWatermark').output.firstRow.CurrentWatermark", "type": "Expression" },
+                            "type": "DateTime"
+                        },
+                        "RowCount": {
+                            "value": { "value": "@activity('CopyPOSSalesIncremental').output.rowsCopied", "type": "Expression" },
+                            "type": "Int64"
+                        }
+                    }
+                },
+                "linkedServiceName": {
+                    "referenceName": "ls_sqlserver_pos",
+                    "type": "LinkedServiceReference"
+                }
+            }
+        ],
+        "annotations": [
+            "extract",
+            "pos-sales",
+            "incremental",
+            "migrated-from-ssis"
+        ]
+    }
+}

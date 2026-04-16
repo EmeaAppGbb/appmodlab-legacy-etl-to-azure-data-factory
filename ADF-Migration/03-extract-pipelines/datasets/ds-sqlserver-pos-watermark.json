@@ -1,0 +1,16 @@
+{
+    "name": "ds_sqlserver_pos_watermark",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "Dataset for watermark table used by incremental POS Sales extract (maps to SSIS audit.ExtractLog)",
+        "linkedServiceName": {
+            "referenceName": "ls_sqlserver_pos",
+            "type": "LinkedServiceReference"
+        },
+        "type": "SqlServerTable",
+        "typeProperties": {
+            "schema": "audit",
+            "table": "ExtractLog"
+        }
+    }
+}

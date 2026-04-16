@@ -1,0 +1,54 @@
+{
+    "name": "pipeline_extract_crm_customers",
+    "type": "Microsoft.DataFactory/factories/pipelines",
+    "properties": {
+        "description": "Full extract of active CRM customers from SQL Server to ADLS Gen2 Parquet. Migrated from Extract_CRM_Customers.dtsx which truncated staging.CRMCustomers, then used OLE DB Source querying dbo.Customers WHERE IsActive = 1, Derived Column for FullName and ExtractTimestamp, and OLE DB Destination.",
+        "activities": [
+            {
+                "name": "CopyCRMCustomersFull",
+                "description": "Full copy of active customers from CRM SQL Server to ADLS Gen2 Parquet (replaces SSIS Truncate + Data Flow pattern; ADF overwrites the partition folder each run)",
+                "type": "Copy",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.01:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlServerSource",
+                        "sqlReaderQuery": "SELECT CustomerID, FirstName, LastName, CONCAT(FirstName, ' ', LastName) AS FullName, Email, Phone, Address, City, State, ZipCode, Country, LoyaltyTier, LoyaltyPoints, Segment, CreatedDate, LastModifiedDate, IsActive, GETDATE() AS ExtractTimestamp FROM dbo.Customers WHERE IsActive = 1"
+                    },
+                    "sink": {
+                        "type": "ParquetSink",
+                        "storeSettings": {
+                            "type": "AzureBlobFSWriteSettings"
+                        },
+                        "formatSettings": {
+                            "type": "ParquetWriteSettings"
+                        }
+                    },
+                    "enableStaging": false
+                },
+                "inputs": [
+                    {
+                        "referenceName": "ds_sqlserver_crm_customers",
+                        "type": "DatasetReference"
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "ds_adls_parquet_crm_customers",
+                        "type": "DatasetReference"
+                    }
+                ]
+            }
+        ],
+        "annotations": [
+            "extract",
+            "crm-customers",
+            "full-load",
+            "migrated-from-ssis"
+        ]
+    }
+}

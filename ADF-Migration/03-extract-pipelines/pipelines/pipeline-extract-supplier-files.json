@@ -1,0 +1,120 @@
+{
+    "name": "pipeline_extract_supplier_files",
+    "type": "Microsoft.DataFactory/factories/pipelines",
+    "properties": {
+        "description": "Extracts supplier pricing CSV files from SFTP and loads to ADLS Gen2 Parquet. Migrated from Extract_Supplier_Files.dtsx which used a ForEach File Enumerator over \\\\FTP-SHARE\\suppliers\\pricing_*.csv, with a Flat File Source (columns: SupplierID, ProductID, UnitCost, EffectiveDate) and OLE DB Destination to staging.SupplierPricing. ADF uses SFTP connector with GetMetadata + ForEach to replace the FTP file loop pattern.",
+        "activities": [
+            {
+                "name": "GetSupplierFileList",
+                "description": "List CSV files matching pricing_*.csv pattern on SFTP (replaces SSIS ForEachFileEnumerator configuration)",
+                "type": "GetMetadata",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "ds_sftp_supplier_csv",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "fileName": "pricing_*.csv"
+                        }
+                    },
+                    "fieldList": [
+                        "childItems"
+                    ],
+                    "storeSettings": {
+                        "type": "SftpReadSettings",
+                        "recursive": false,
+                        "wildcardFileName": "pricing_*.csv",
+                        "wildcardFolderPath": "/suppliers"
+                    },
+                    "formatSettings": {
+                        "type": "DelimitedTextReadSettings"
+                    }
+                }
+            },
+            {
+                "name": "ForEachSupplierFile",
+                "description": "Iterate over each supplier pricing CSV file (replaces SSIS ForEach Loop Container with FileSpec=pricing_*.csv)",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "GetSupplierFileList",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "typeProperties": {
+                    "isSequential": false,
+                    "batchCount": 10,
+                    "items": {
+                        "value": "@activity('GetSupplierFileList').output.childItems",
+                        "type": "Expression"
+                    },
+                    "activities": [
+                        {
+                            "name": "CopySupplierCSVToParquet",
+                            "description": "Copy individual supplier CSV file to ADLS Gen2 Parquet (replaces SSIS inner Data Flow with Flat File Source and OLE DB Destination)",
+                            "type": "Copy",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.00:30:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 30
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "DelimitedTextSource",
+                                    "storeSettings": {
+                                        "type": "SftpReadSettings",
+                                        "recursive": false
+                                    },
+                                    "formatSettings": {
+                                        "type": "DelimitedTextReadSettings"
+                                    }
+                                },
+                                "sink": {
+                                    "type": "ParquetSink",
+                                    "storeSettings": {
+                                        "type": "AzureBlobFSWriteSettings"
+                                    },
+                                    "formatSettings": {
+                                        "type": "ParquetWriteSettings"
+                                    }
+                                },
+                                "enableStaging": false
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "ds_sftp_supplier_csv",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "fileName": {
+                                            "value": "@item().name",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "ds_adls_parquet_supplier_pricing",
+                                    "type": "DatasetReference"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ],
+        "annotations": [
+            "extract",
+            "supplier-pricing",
+            "sftp",
+            "foreach",
+            "migrated-from-ssis"
+        ]
+    }
+}

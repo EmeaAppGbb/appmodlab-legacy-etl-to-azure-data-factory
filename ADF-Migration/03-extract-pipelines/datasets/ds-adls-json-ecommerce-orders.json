@@ -1,0 +1,23 @@
+{
+    "name": "ds_adls_json_ecommerce_orders",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "ADLS Gen2 JSON sink for E-commerce Orders (replaces SSIS staging.EcommerceOrders OLEDB destination)",
+        "linkedServiceName": {
+            "referenceName": "ls_adls_gen2",
+            "type": "LinkedServiceReference"
+        },
+        "type": "Json",
+        "typeProperties": {
+            "location": {
+                "type": "AzureBlobFSLocation",
+                "fileSystem": "raw",
+                "folderPath": {
+                    "value": "ecommerce-orders/@{formatDateTime(utcNow(), 'yyyy/MM/dd')}",
+                    "type": "Expression"
+                },
+                "fileName": "ecommerce_orders.json"
+            }
+        }
+    }
+}

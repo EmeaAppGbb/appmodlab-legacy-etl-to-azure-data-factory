@@ -1,0 +1,27 @@
+{
+    "name": "ds_sqlserver_pos_sales",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "POS Sales Transactions source dataset (maps to SSIS dbo.SalesTransactions query with watermark filter)",
+        "linkedServiceName": {
+            "referenceName": "ls_sqlserver_pos",
+            "type": "LinkedServiceReference"
+        },
+        "type": "SqlServerTable",
+        "typeProperties": {
+            "schema": "dbo",
+            "table": "SalesTransactions"
+        },
+        "schema": [
+            { "name": "TransactionID", "type": "int" },
+            { "name": "StoreID", "type": "int" },
+            { "name": "ProductID", "type": "int" },
+            { "name": "CustomerID", "type": "int" },
+            { "name": "TransactionDate", "type": "datetime" },
+            { "name": "Quantity", "type": "int" },
+            { "name": "UnitPrice", "type": "decimal", "precision": 18, "scale": 2 },
+            { "name": "Discount", "type": "decimal", "precision": 18, "scale": 2 },
+            { "name": "TotalAmount", "type": "decimal", "precision": 18, "scale": 2 }
+        ]
+    }
+}

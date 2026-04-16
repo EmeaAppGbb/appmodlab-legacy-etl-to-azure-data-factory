@@ -1,0 +1,19 @@
+{
+    "name": "ls_adls_gen2",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+        "description": "Azure Data Lake Storage Gen2 linked service for raw/staging data landing zone (replaces SSIS Staging_Target OLEDB connections)",
+        "type": "AzureBlobFS",
+        "typeProperties": {
+            "url": "https://brightfieldadls.dfs.core.windows.net",
+            "accountKey": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "ls_keyvault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "adls-gen2-account-key"
+            }
+        }
+    }
+}

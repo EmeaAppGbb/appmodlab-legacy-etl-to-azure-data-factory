@@ -1,0 +1,24 @@
+{
+    "name": "ds_adls_parquet_pos_sales",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "ADLS Gen2 Parquet sink for POS Sales data (replaces SSIS staging.POSSales OLEDB destination)",
+        "linkedServiceName": {
+            "referenceName": "ls_adls_gen2",
+            "type": "LinkedServiceReference"
+        },
+        "type": "Parquet",
+        "typeProperties": {
+            "location": {
+                "type": "AzureBlobFSLocation",
+                "fileSystem": "raw",
+                "folderPath": {
+                    "value": "pos-sales/@{formatDateTime(utcNow(), 'yyyy/MM/dd')}",
+                    "type": "Expression"
+                },
+                "fileName": "pos_sales.parquet"
+            },
+            "compressionCodec": "snappy"
+        }
+    }
+}

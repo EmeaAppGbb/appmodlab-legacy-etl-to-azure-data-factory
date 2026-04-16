@@ -1,0 +1,27 @@
+{
+    "name": "ds_adls_parquet_supplier_pricing",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "ADLS Gen2 Parquet sink for Supplier Pricing data (replaces SSIS staging.SupplierPricing OLEDB destination)",
+        "linkedServiceName": {
+            "referenceName": "ls_adls_gen2",
+            "type": "LinkedServiceReference"
+        },
+        "type": "Parquet",
+        "typeProperties": {
+            "location": {
+                "type": "AzureBlobFSLocation",
+                "fileSystem": "raw",
+                "folderPath": {
+                    "value": "supplier-pricing/@{formatDateTime(utcNow(), 'yyyy/MM/dd')}",
+                    "type": "Expression"
+                },
+                "fileName": {
+                    "value": "@concat('supplier_pricing_', pipeline().RunId, '.parquet')",
+                    "type": "Expression"
+                }
+            },
+            "compressionCodec": "snappy"
+        }
+    }
+}

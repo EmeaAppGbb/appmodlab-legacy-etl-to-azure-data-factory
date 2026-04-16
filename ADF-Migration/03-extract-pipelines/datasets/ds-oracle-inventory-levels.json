@@ -1,0 +1,25 @@
+{
+    "name": "ds_oracle_inventory_levels",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "Oracle Inventory stock levels source dataset (maps to SSIS INVENTORY.STOCK_LEVELS query)",
+        "linkedServiceName": {
+            "referenceName": "ls_oracle_inventory",
+            "type": "LinkedServiceReference"
+        },
+        "type": "OracleTable",
+        "typeProperties": {
+            "schema": "INVENTORY",
+            "table": "STOCK_LEVELS"
+        },
+        "schema": [
+            { "name": "STORE_ID", "type": "NUMBER" },
+            { "name": "PRODUCT_ID", "type": "NUMBER" },
+            { "name": "QUANTITY_ON_HAND", "type": "NUMBER" },
+            { "name": "QUANTITY_ON_ORDER", "type": "NUMBER" },
+            { "name": "LAST_RESTOCK_DATE", "type": "DATE" },
+            { "name": "REORDER_POINT", "type": "NUMBER" },
+            { "name": "SNAPSHOT_DATE", "type": "DATE" }
+        ]
+    }
+}

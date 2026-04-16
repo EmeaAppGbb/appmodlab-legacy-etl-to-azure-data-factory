@@ -1,0 +1,37 @@
+{
+    "name": "ds_sftp_supplier_csv",
+    "type": "Microsoft.DataFactory/factories/datasets",
+    "properties": {
+        "description": "Supplier pricing CSV files on SFTP (replaces SSIS FlatFile connection to \\\\FTP-SHARE\\suppliers\\pricing_*.csv)",
+        "linkedServiceName": {
+            "referenceName": "ls_sftp_supplier",
+            "type": "LinkedServiceReference"
+        },
+        "parameters": {
+            "fileName": {
+                "type": "string"
+            }
+        },
+        "type": "DelimitedText",
+        "typeProperties": {
+            "location": {
+                "type": "SftpLocation",
+                "folderPath": "/suppliers",
+                "fileName": {
+                    "value": "@dataset().fileName",
+                    "type": "Expression"
+                }
+            },
+            "columnDelimiter": ",",
+            "quoteChar": "\"",
+            "firstRowAsHeader": true,
+            "encodingName": "Windows-1252"
+        },
+        "schema": [
+            { "name": "SupplierID", "type": "String" },
+            { "name": "ProductID", "type": "String" },
+            { "name": "UnitCost", "type": "Decimal" },
+            { "name": "EffectiveDate", "type": "DateTime" }
+        ]
+    }
+}

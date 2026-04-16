@@ -1,0 +1,87 @@
+{
+    "name": "pipeline_extract_ecommerce_orders",
+    "type": "Microsoft.DataFactory/factories/pipelines",
+    "properties": {
+        "description": "Extracts e-commerce orders from REST API to ADLS Gen2 JSON. Migrated from Extract_Ecommerce_Orders.dtsx which used a C# Script Task with HttpClient to call https://api.brightfield-ecommerce.com/v1/orders with API key auth, parse JSON, and bulk insert into staging.EcommerceOrders. ADF REST connector replaces the anti-pattern Script Task.",
+        "activities": [
+            {
+                "name": "CopyEcommerceOrdersFromAPI",
+                "description": "Copy orders from REST API to ADLS Gen2 (replaces SSIS C# Script Task that used HttpClient with manual JSON parsing and bulk insert)",
+                "type": "Copy",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.01:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "RestSource",
+                        "httpRequestTimeout": "00:10:00",
+                        "requestInterval": "00.00:00:00.010",
+                        "requestMethod": "GET",
+                        "additionalHeaders": {
+                            "Accept": "application/json"
+                        },
+                        "paginationRules": {
+                            "AbsoluteUrl": "$.nextPageUrl",
+                            "EndCondition:$.nextPageUrl": "Empty"
+                        }
+                    },
+                    "sink": {
+                        "type": "JsonSink",
+                        "storeSettings": {
+                            "type": "AzureBlobFSWriteSettings"
+                        },
+                        "formatSettings": {
+                            "type": "JsonWriteSettings",
+                            "filePattern": "arrayOfObjects"
+                        }
+                    },
+                    "enableStaging": false
+                },
+                "inputs": [
+                    {
+                        "referenceName": "ds_rest_ecommerce_orders",
+                        "type": "DatasetReference"
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "ds_adls_json_ecommerce_orders",
+                        "type": "DatasetReference"
+                    }
+                ]
+            },
+            {
+                "name": "ValidateOrderData",
+                "description": "Validate extracted order data (replaces SSIS 'Validate JSON Data' SQL Task that called staging.ValidateEcommerceOrders)",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                    {
+                        "activity": "CopyEcommerceOrdersFromAPI",
+                        "dependencyConditions": [ "Succeeded" ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:30:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "storedProcedureName": "[staging].[ValidateEcommerceOrders]"
+                },
+                "linkedServiceName": {
+                    "referenceName": "ls_sqlserver_pos",
+                    "type": "LinkedServiceReference"
+                }
+            }
+        ],
+        "annotations": [
+            "extract",
+            "ecommerce-orders",
+            "rest-api",
+            "migrated-from-ssis"
+        ]
+    }
+}

@@ -1,0 +1,22 @@
+{
+    "name": "ls_rest_ecommerce",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+        "description": "REST linked service for Brightfield E-commerce Orders API (replaces SSIS C# Script Task HttpClient calls)",
+        "type": "RestService",
+        "typeProperties": {
+            "url": "https://api.brightfield-ecommerce.com/v1",
+            "enableServerCertificateValidation": true,
+            "authenticationType": "ApiKey",
+            "apiKey": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "ls_keyvault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "ecommerce-api-key"
+            },
+            "apiKeyName": "x-api-key"
+        }
+    }
+}
