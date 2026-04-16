@@ -1,0 +1,49 @@
+ÔùÅ List directory ADF-Migration
+  Ôöö 8 files found
+
+ÔùÅ Explore Explore repo for context
+  Ôöé Read dataflow-scd2-customer.json
+  Ôöé   Ôöé ADF-Migration\05-scd-type2\dataflow-scd2-customer.json
+  Ôöé   Ôöö L1:80 (80 lines read)
+  Ôöö Read 01_Create_DataWarehouse_Schema.sql
+      Ôöé BrightfieldETL\SQL\DataWarehouse\01_Create_DataWarehouse_Schema.sql
+      Ôöö L140:220 (70 lines read)
+
+Now I have full context. Let me create all 4 files.
+
+ÔùÅ Create 09-validation directory (shell)
+  Ôöé New-Item -ItemType Directory -Path "C:\code\gbb\labs\appmodlab-legacy-etl-to
+  Ôöé -azure-data-factory\ADF-Migration\09-validation" -Force | Out-Null;
+  Ôöé Write-Output "Created"
+  Ôöö 2 lines...
+
+ÔùÅ Create validation-queries.sql +369
+  Ôöö ADF-Migration\09-validation\validation-queries.sql
+
+ÔùÅ Create pipeline-validation.json +396
+  Ôöö ADF-Migration\09-validation\pipeline-validation.json
+
+ÔùÅ Create test-scenarios.md +377
+  Ôöö ADF-Migration\09-validation\test-scenarios.md
+
+ÔùÅ Create ci-cd-pipeline.yml +592
+  Ôöö ADF-Migration\09-validation\ci-cd-pipeline.yml
+
+ÔùÅ Verify created files (shell)
+  Ôöé Get-ChildItem "C:\code\gbb\labs\appmodlab-legacy-etl-to-azure-data-factory\A
+  Ôöé DF-Migration\09-validation" | Format-Table Name, Length -AutoSize
+  Ôöö 7 lines...
+
+All 4 files created in `ADF-Migration/09-validation/`:
+
+| File | Description |
+|------|-------------|
+| **validation-queries.sql** | 6 sections: row counts, checksums, SCD2 integrity (7 checks), referential integrity, incremental load validation, data quality checks ÔÇö all referencing actual Brightfield tables |
+| **pipeline-validation.json** | ADF pipeline with 9 parallel validation activities (row counts, checksums, SCD2 overlaps/dates, referential integrity, data quality, duplicates) plus conditional alert on failure |
+| **test-scenarios.md** | 28 test cases across 5 categories: full load (5), incremental (6), SCD2 (7), error handling (8), performance (7) with execution matrix and exit criteria |
+| **ci-cd-pipeline.yml** | GitHub Actions with 5 stages: validate (Bicep + JSON + pipeline structure), deploy-dev, validate-dev (runs validation pipeline), deploy-staging, deploy-prod (with manual approval + smoke test) |
+
+
+Changes   +1734 -0
+Requests  3 Premium (7m 2s)
+Tokens    Ôåæ 598.8k ÔÇó Ôåô 32.8k ÔÇó 490.0k (cached)

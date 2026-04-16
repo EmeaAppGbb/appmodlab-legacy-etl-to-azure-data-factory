@@ -1,0 +1,395 @@
+{
+    "name": "pipeline_validation",
+    "properties": {
+        "description": "Automated validation pipeline for Brightfield Retail SSIS-to-ADF migration. Runs row counts, checksums, SCD2 integrity checks, and referential integrity validation after each ETL run.",
+        "activities": [
+            {
+                "name": "InitializeValidation",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "storedProcedureName": "[audit].[InitializeBatch]",
+                    "storedProcedureParameters": {
+                        "BatchName": {
+                            "value": "ValidationRun",
+                            "type": "String"
+                        },
+                        "PipelineRunId": {
+                            "value": {
+                                "value": "@pipeline().RunId",
+                                "type": "Expression"
+                            },
+                            "type": "String"
+                        }
+                    }
+                },
+                "linkedServiceName": {
+                    "referenceName": "ls_synapse_dw",
+                    "type": "LinkedServiceReference"
+                }
+            },
+            {
+                "name": "ValidateRowCounts",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeValidation",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlDWSource",
+                        "sqlReaderQuery": "SELECT 'staging.POSSales' AS TableName, COUNT(*) AS RowCount FROM staging.POSSales UNION ALL SELECT 'staging.InventoryLevels', COUNT(*) FROM staging.InventoryLevels UNION ALL SELECT 'staging.CRMCustomers', COUNT(*) FROM staging.CRMCustomers UNION ALL SELECT 'dw.FactSales', COUNT(*) FROM dw.FactSales UNION ALL SELECT 'dw.FactInventory', COUNT(*) FROM dw.FactInventory UNION ALL SELECT 'dw.DimCustomer', COUNT(*) FROM dw.DimCustomer UNION ALL SELECT 'dw.DimProduct', COUNT(*) FROM dw.DimProduct UNION ALL SELECT 'dw.DimStore', COUNT(*) FROM dw.DimStore UNION ALL SELECT 'dw.DimDate', COUNT(*) FROM dw.DimDate"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_synapse_dw",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ValidateFactSalesChecksums",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeValidation",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:15:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlDWSource",
+                        "sqlReaderQuery": "SELECT d.Date AS SalesDate, COUNT(*) AS RowCount, SUM(CAST(f.Revenue AS DECIMAL(18,2))) AS TotalRevenue, SUM(CAST(f.GrossProfit AS DECIMAL(18,2))) AS TotalGrossProfit, CHECKSUM_AGG(CHECKSUM(f.DateKey, f.StoreKey, f.ProductKey, f.CustomerKey, f.Revenue, f.Cost)) AS RowChecksum FROM dw.FactSales f INNER JOIN dw.DimDate d ON f.DateKey = d.DateKey WHERE d.Date >= DATEADD(DAY, -7, CAST(GETDATE() AS DATE)) GROUP BY d.Date ORDER BY d.Date"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_synapse_dw",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ValidateSCD2CurrentRecords",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeValidation",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlDWSource",
+                        "sqlReaderQuery": "SELECT CustomerID, COUNT(*) AS CurrentRecordCount FROM dw.DimCustomer WHERE IsCurrent = 1 GROUP BY CustomerID HAVING COUNT(*) <> 1"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_synapse_dw",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ValidateSCD2NullEndDates",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeValidation",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlDWSource",
+                        "sqlReaderQuery": "SELECT 'CurrentWithEndDate' AS CheckName, COUNT(*) AS ViolationCount FROM dw.DimCustomer WHERE IsCurrent = 1 AND EndDate IS NOT NULL UNION ALL SELECT 'HistoricalWithoutEndDate', COUNT(*) FROM dw.DimCustomer WHERE IsCurrent = 0 AND EndDate IS NULL UNION ALL SELECT 'StartAfterEnd', COUNT(*) FROM dw.DimCustomer WHERE IsCurrent = 0 AND StartDate >= EndDate"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_synapse_dw",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ValidateSCD2Overlaps",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeValidation",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:15:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlDWSource",
+                        "sqlReaderQuery": "SELECT COUNT(*) AS OverlapCount FROM dw.DimCustomer a INNER JOIN dw.DimCustomer b ON a.CustomerID = b.CustomerID AND a.CustomerKey <> b.CustomerKey WHERE a.StartDate < ISNULL(b.EndDate, '9999-12-31') AND b.StartDate < ISNULL(a.EndDate, '9999-12-31')"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_synapse_dw",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "ValidateReferentialIntegrity",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeValidation",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:15:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlDWSource",
+                        "sqlReaderQuery": "SELECT 'FactSales_DateKey' AS FKCheck, COUNT(*) AS OrphanCount FROM dw.FactSales f LEFT JOIN dw.DimDate d ON f.DateKey = d.DateKey WHERE d.DateKey IS NULL UNION ALL SELECT 'FactSales_StoreKey', COUNT(*) FROM dw.FactSales f LEFT JOIN dw.DimStore s ON f.StoreKey = s.StoreKey WHERE s.StoreKey IS NULL UNION ALL SELECT 'FactSales_ProductKey', COUNT(*) FROM dw.FactSales f LEFT JOIN dw.DimProduct p ON f.ProductKey = p.ProductKey WHERE p.ProductKey IS NULL UNION ALL SELECT 'FactSales_CustomerKey', COUNT(*) FROM dw.FactSales f LEFT JOIN dw.DimCustomer c ON f.CustomerKey = c.CustomerKey WHERE c.CustomerKey IS NULL UNION ALL SELECT 'FactInventory_AllKeys', COUNT(*) FROM dw.FactInventory f LEFT JOIN dw.DimDate d ON f.DateKey = d.DateKey LEFT JOIN dw.DimStore s ON f.StoreKey = s.StoreKey LEFT JOIN dw.DimProduct p ON f.ProductKey = p.ProductKey WHERE d.DateKey IS NULL OR s.StoreKey IS NULL OR p.ProductKey IS NULL"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_synapse_dw",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ValidateDataQuality",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeValidation",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlDWSource",
+                        "sqlReaderQuery": "SELECT 'GrossProfitMismatch' AS CheckName, COUNT(*) AS ViolationCount FROM dw.FactSales WHERE ABS(GrossProfit - (Revenue - Cost)) > 0.01 UNION ALL SELECT 'NullFactSalesKeys', COUNT(*) FROM dw.FactSales WHERE DateKey IS NULL OR StoreKey IS NULL OR ProductKey IS NULL UNION ALL SELECT 'NullFactInventoryKeys', COUNT(*) FROM dw.FactInventory WHERE DateKey IS NULL OR StoreKey IS NULL OR ProductKey IS NULL UNION ALL SELECT 'NegativeRevenue', COUNT(*) FROM dw.FactSales WHERE Revenue < 0 UNION ALL SELECT 'NegativeCost', COUNT(*) FROM dw.FactSales WHERE Cost < 0 UNION ALL SELECT 'NegativeQtyOnHand', COUNT(*) FROM dw.FactInventory WHERE QuantityOnHand < 0"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_synapse_dw",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ValidateDuplicates",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "InitializeValidation",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 1,
+                    "retryIntervalInSeconds": 30
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlDWSource",
+                        "sqlReaderQuery": "SELECT 'POSSales_Duplicates' AS CheckName, COUNT(*) AS DuplicateCount FROM (SELECT TransactionID FROM staging.POSSales GROUP BY TransactionID HAVING COUNT(*) > 1) d UNION ALL SELECT 'Inventory_Duplicates', COUNT(*) FROM (SELECT StoreID, ProductID, SnapshotDate FROM staging.InventoryLevels GROUP BY StoreID, ProductID, SnapshotDate HAVING COUNT(*) > 1) d"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_synapse_dw",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "EvaluateValidationResults",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "ValidateRowCounts",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "ValidateFactSalesChecksums",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "ValidateSCD2CurrentRecords",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "ValidateSCD2NullEndDates",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "ValidateSCD2Overlaps",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "ValidateReferentialIntegrity",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "ValidateDataQuality",
+                        "dependencyConditions": ["Succeeded"]
+                    },
+                    {
+                        "activity": "ValidateDuplicates",
+                        "dependencyConditions": ["Succeeded"]
+                    }
+                ],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@and(equals(activity('ValidateSCD2Overlaps').output.firstRow.OverlapCount, 0), equals(length(activity('ValidateSCD2CurrentRecords').output.value), 0))",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "LogValidationSuccess",
+                            "type": "SqlServerStoredProcedure",
+                            "typeProperties": {
+                                "storedProcedureName": "[audit].[CompleteBatch]",
+                                "storedProcedureParameters": {
+                                    "BatchStatus": {
+                                        "value": "ValidationPassed",
+                                        "type": "String"
+                                    },
+                                    "PipelineRunId": {
+                                        "value": {
+                                            "value": "@pipeline().RunId",
+                                            "type": "Expression"
+                                        },
+                                        "type": "String"
+                                    }
+                                }
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "ls_synapse_dw",
+                                "type": "LinkedServiceReference"
+                            }
+                        }
+                    ],
+                    "ifFalseActivities": [
+                        {
+                            "name": "LogValidationFailure",
+                            "type": "SqlServerStoredProcedure",
+                            "typeProperties": {
+                                "storedProcedureName": "[audit].[CompleteBatch]",
+                                "storedProcedureParameters": {
+                                    "BatchStatus": {
+                                        "value": "ValidationFailed",
+                                        "type": "String"
+                                    },
+                                    "PipelineRunId": {
+                                        "value": {
+                                            "value": "@pipeline().RunId",
+                                            "type": "Expression"
+                                        },
+                                        "type": "String"
+                                    }
+                                }
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "ls_synapse_dw",
+                                "type": "LinkedServiceReference"
+                            }
+                        },
+                        {
+                            "name": "SendValidationAlert",
+                            "type": "WebActivity",
+                            "dependsOn": [
+                                {
+                                    "activity": "LogValidationFailure",
+                                    "dependencyConditions": ["Succeeded"]
+                                }
+                            ],
+                            "typeProperties": {
+                                "url": {
+                                    "value": "@pipeline().parameters.AlertWebhookUrl",
+                                    "type": "Expression"
+                                },
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": "application/json"
+                                },
+                                "body": {
+                                    "value": "@json(concat('{\"title\": \"ADF Validation Failed\", \"pipelineRunId\": \"', pipeline().RunId, '\", \"factoryName\": \"', pipeline().DataFactory, '\", \"scd2OverlapCount\": ', string(activity('ValidateSCD2Overlaps').output.firstRow.OverlapCount), ', \"scd2CurrentRecordViolations\": ', string(length(activity('ValidateSCD2CurrentRecords').output.value)), ', \"timestamp\": \"', utcnow(), '\"}'))",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "parameters": {
+            "AlertWebhookUrl": {
+                "type": "string",
+                "defaultValue": "https://hooks.brightfield.com/adf-alerts"
+            },
+            "ValidationScope": {
+                "type": "string",
+                "defaultValue": "Full"
+            }
+        },
+        "variables": {
+            "ValidationStatus": {
+                "type": "String",
+                "defaultValue": "Pending"
+            },
+            "ErrorMessages": {
+                "type": "Array",
+                "defaultValue": []
+            }
+        },
+        "folder": {
+            "name": "Validation"
+        },
+        "annotations": [
+            "validation",
+            "migration-parity",
+            "scd2-integrity",
+            "data-quality"
+        ]
+    }
+}
