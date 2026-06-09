@@ -11,7 +11,7 @@ modernizationTools: ["Azure Data Factory"]
 agenticTools: []
 tags: ["ssis", "etl", "data-factory", "azure-pipelines", "data-integration"]
 extensions: ["github.copilot"]
-thumbnail: ""
+thumbnail: "https://raw.githubusercontent.com/EmeaAppGbb/appmodlab-legacy-etl-to-azure-data-factory/main/assets/thumbnail-gpt-image.png"
 video: ""
 version: "1.0.0"
 screenshots:
